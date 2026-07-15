@@ -35,7 +35,10 @@
       "Task": "Delegando",
       "TodoWrite": "Planificando",
       "default": "Usando una herramienta"
-    }
+    },
+    "hooksStale": "Reinicia Claude Code",
+    "hooksStaleHint": "los hooks de estado llegaron después de estas sesiones",
+    "notInstalledHint": "ejecuta: npm run install-hooks"
   },
   "duration": {
     "join": " y ",

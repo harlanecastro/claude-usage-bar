@@ -125,7 +125,7 @@ function currentStatus() {
   return activeSessions()[0] ?? null;
 }
 
-/** Are the hooks installed and writing? Drives the "set this up" hint. */
+/** Are the hooks installed at all? The install is what creates this directory. */
 function hooksInstalled() {
   try {
     return fs.existsSync(STATE_DIR);
@@ -134,4 +134,45 @@ function hooksInstalled() {
   }
 }
 
-module.exports = { activeSessions, currentStatus, hooksInstalled, STATE_DIR };
+const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const TRANSCRIPT_FRESH = 2 * 60 * 1000;
+
+/**
+ * Is Claude Code running right now, regardless of what the hooks say?
+ *
+ * Every session appends to its own transcript as it works, so one touched in the
+ * last couple of minutes means Claude is alive. This exists to catch the case
+ * that otherwise looks like nothing at all: Claude Code reads settings.json once,
+ * at session start, so a session older than the hook install never fires them and
+ * the widget would sit silent while Claude is plainly working.
+ */
+function runningWithoutHooks() {
+  const cutoff = Date.now() - TRANSCRIPT_FRESH;
+  let projects = [];
+  try {
+    projects = fs.readdirSync(PROJECTS_DIR);
+  } catch {
+    return 0;
+  }
+
+  let count = 0;
+  for (const project of projects) {
+    let files = [];
+    try {
+      files = fs.readdirSync(path.join(PROJECTS_DIR, project));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      if (!file.endsWith('.jsonl')) continue;
+      try {
+        if (fs.statSync(path.join(PROJECTS_DIR, project, file)).mtimeMs > cutoff) count++;
+      } catch { /* vanished mid-read */ }
+    }
+  }
+  return count;
+}
+
+module.exports = {
+  activeSessions, currentStatus, hooksInstalled, runningWithoutHooks, STATE_DIR,
+};

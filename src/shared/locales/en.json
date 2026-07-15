@@ -35,7 +35,10 @@
       "Task": "Delegating",
       "TodoWrite": "Planning",
       "default": "Using a tool"
-    }
+    },
+    "hooksStale": "Claude Code needs a restart",
+    "hooksStaleHint": "the status hooks came after these sessions started",
+    "notInstalledHint": "run: npm run install-hooks"
   },
   "duration": {
     "join": " ",
