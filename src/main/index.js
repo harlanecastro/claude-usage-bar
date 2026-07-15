@@ -138,6 +138,26 @@ async function startSignIn() {
   }
 }
 
+/**
+ * Turn a meter on or off, honouring the same rule the settings window does: the
+ * last one selected cannot be turned off, or the strip would have nothing to
+ * draw and the only way back is through the widget itself.
+ */
+function toggleMeter(key) {
+  const chosen = getSettings().visibleMeters;
+  const next = chosen.includes(key)
+    ? chosen.filter((k) => k !== key)
+    : [...chosen, key];
+  if (!next.length) return;
+
+  setSettings({ visibleMeters: next });
+  paint();
+  // The settings window may be open on the same setting — keep it honest.
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send('settings:changed');
+  }
+}
+
 function buildMenu() {
   const t = translator();
   const settings = getSettings();
@@ -151,6 +171,26 @@ function buildMenu() {
       items.push({ label: `${block.label} ${Math.round(block.pct)}%`, enabled: false });
       items.push({ label: block.sub, enabled: false });
     }
+    items.push({ type: 'separator' });
+  }
+
+  const meters = availableMeters();
+  if (meters.length) {
+    items.push({
+      label: t.t('settings.meters'),
+      submenu: meters.map((meter) => {
+        const on = settings.visibleMeters.includes(meter.key);
+        return {
+          label: meter.label,
+          type: 'checkbox',
+          checked: on,
+          // Greyed out rather than hidden: it explains the rule by showing the
+          // one item that cannot be turned off.
+          enabled: !(on && settings.visibleMeters.length === 1),
+          click: () => toggleMeter(meter.key),
+        };
+      }),
+    });
     items.push({ type: 'separator' });
   }
 
@@ -270,6 +310,19 @@ if (!app.requestSingleInstanceLock()) {
     await auth.restore();
     await refresh();
     schedulePolling();
+
+    // Prints the context menu as data. The menu only exists while a native popup
+    // is up, so this is the only way to check it without a human holding a mouse.
+    if (process.argv.includes('--dump-menu')) {
+      const describe = (item) => ({
+        label: item.label,
+        type: item.type,
+        checked: item.checked,
+        enabled: item.enabled,
+        submenu: item.submenu?.items.map(describe),
+      });
+      console.log('[menu]', JSON.stringify(buildMenu().items.map(describe), null, 1));
+    }
   });
 
   app.on('before-quit', () => {

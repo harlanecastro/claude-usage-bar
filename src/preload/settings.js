@@ -6,4 +6,7 @@ contextBridge.exposeInMainWorld('settingsApi', {
   signIn: () => ipcRenderer.invoke('settings:signIn'),
   signOut: () => ipcRenderer.invoke('settings:signOut'),
   onAuth: (handler) => ipcRenderer.on('settings:auth', (_e, signedIn) => handler(signedIn)),
+  // Fired when something outside this window changed a setting — the context
+  // menu can toggle meters too.
+  onChanged: (handler) => ipcRenderer.on('settings:changed', () => handler()),
 });

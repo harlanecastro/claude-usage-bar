@@ -194,6 +194,16 @@ function syncControls() {
 
 // ---------- boot ----------
 
+async function reload() {
+  const data = await window.settingsApi.get();
+  state.settings = data.settings;
+  state.strings = data.strings;
+  state.meters = data.meters ?? [];
+  state.signedIn = data.signedIn;
+  applyStrings();
+  syncControls();
+}
+
 (async function init() {
   const data = await window.settingsApi.get();
   state.settings = data.settings;
@@ -224,3 +234,7 @@ window.settingsApi.onAuth((signedIn) => {
   state.signedIn = signedIn;
   renderAuth();
 });
+
+// The context menu toggles the same meters this window does; pull the new state
+// rather than letting the two drift apart.
+window.settingsApi.onChanged(reload);
