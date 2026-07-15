@@ -1,0 +1,57 @@
+{
+  "language": "Português (Brasil)",
+  "widget": {
+    "weeklyUsage": "Uso semanal",
+    "weeklyLimitReached": "Limite semanal atingido",
+    "monthlyUsage": "Uso mensal",
+    "resetsIn": "Renova em {duration}",
+    "resetsOn": "Renova em {date}",
+    "loading": "Carregando seu uso",
+    "notSignedIn": "Você não está conectado",
+    "clickToSignIn": "Clique aqui para entrar",
+    "loadFailed": "Não foi possível carregar seu uso",
+    "clickToRetry": "Clique aqui para tentar de novo"
+  },
+  "duration": {
+    "join": " e ",
+    "lessThanAMinute": "menos de um minuto",
+    "day": "{n} dia",
+    "days": "{n} dias",
+    "hour": "{n} hora",
+    "hours": "{n} horas",
+    "minute": "{n} minuto",
+    "minutes": "{n} minutos"
+  },
+  "menu": {
+    "openUsagePage": "Abrir página de uso",
+    "refreshNow": "Atualizar agora",
+    "settings": "Configurações…",
+    "startAtLogin": "Iniciar junto com o sistema",
+    "signIn": "Entrar na sua conta Claude…",
+    "signOut": "Sair da conta",
+    "quit": "Fechar"
+  },
+  "settings": {
+    "windowTitle": "Configurações",
+    "language": "Idioma",
+    "languageHint": "Muda na hora todos os textos do widget, do menu e desta janela — sem reiniciar.",
+    "thresholds": "Limites de cor",
+    "thresholdsHint": "Arraste as alças para definir onde a barra fica amarela e onde fica vermelha.",
+    "green": "Verde",
+    "yellow": "Amarelo",
+    "red": "Vermelho",
+    "greenHint": "sobra bastante",
+    "yellowHint": "vá com calma",
+    "redHint": "quase no fim",
+    "showMonthly": "Mostrar também meu limite mensal",
+    "showMonthlyHint": "Adiciona uma segunda barra com o uso extra que você comprou neste mês.",
+    "account": "Conta",
+    "signedInAs": "Conectado",
+    "signedOut": "Você não está conectado",
+    "signIn": "Entrar na sua conta Claude",
+    "signOut": "Sair da conta",
+    "startAtLogin": "Iniciar junto com o sistema",
+    "startAtLoginHint": "Abre o Claude Usage Bar automaticamente quando você entra no computador.",
+    "close": "Fechar"
+  }
+}

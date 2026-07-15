@@ -1,0 +1,135 @@
+/*
+ * The widget draws straight onto the taskbar / menu bar acrylic, so it paints
+ * no background of its own — only text and meters. Anything opaque here would
+ * show up as a pasted rectangle.
+ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  /* A hair of alpha rather than zero. The window is WS_EX_LAYERED, and layered
+     windows hit-test per pixel: fully transparent areas are click-through, so a
+     truly transparent background would send every click to the taskbar behind
+     us and only the glyphs themselves would be clickable. 1% alpha is
+     imperceptible over the acrylic but makes the whole strip a hit target. */
+  background: rgba(0, 0, 0, 0.01);
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The window is as tall as its host bar; the content centres inside it. */
+body {
+  display: flex;
+  align-items: center;
+}
+
+#widget {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border-radius: 6px;
+  transition: background-color 120ms ease;
+}
+
+/* Hover affordance mirrors the host bar's own hit-target feel. */
+#widget.hover { background-color: rgba(255, 255, 255, 0.09); }
+body.light #widget.hover { background-color: rgba(0, 0, 0, 0.06); }
+
+/* ---------- Windows: two lines inside a 48px taskbar ---------- */
+
+body.win #widget {
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  gap: 14px;
+  padding: 3px 10px;
+  color: #f0f0f0;
+}
+body.win.light #widget { color: #1a1a1a; }
+
+body.win .group { display: flex; flex-direction: column; gap: 2px; }
+
+body.win .line1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+body.win .line2 {
+  font-size: 11px;
+  line-height: 1.25;
+  color: #a5a5a5;
+}
+body.win.light .line2 { color: #5d5d5d; }
+
+body.win .divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 0;
+  background: rgba(255, 255, 255, 0.18);
+}
+body.win.light .divider { background: rgba(0, 0, 0, 0.15); }
+
+/* ---------- macOS: one line inside a 24pt menu bar ---------- */
+
+body.mac #widget {
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  gap: 7px;
+  padding: 0 6px;
+  height: 22px;
+  font-size: 12.5px;
+  color: #f2f2f2;
+}
+body.mac.light #widget { color: #131313; }
+
+body.mac .sep { opacity: 0.4; }
+
+/* ---------- shared parts ---------- */
+
+.meter {
+  position: relative;
+  border-radius: 3px;
+  overflow: hidden;
+  flex: none;
+  background: rgba(255, 255, 255, 0.22);
+}
+body.light .meter { background: rgba(0, 0, 0, 0.16); }
+
+body.win .meter { width: 76px; height: 7px; }
+body.mac .meter { width: 52px; height: 5px; border-radius: 2.5px; }
+
+.meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 240ms ease, background-color 240ms ease;
+}
+
+.pct {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+body.win .pct { min-width: 34px; text-align: right; }
+
+.zone-ok i { background: #45b972; }
+.zone-warn i { background: #efb02a; }
+.zone-crit i { background: #ef5b45; }
+
+body.light .zone-ok i { background: #2f9e5b; }
+body.light .zone-warn i { background: #d99400; }
+body.light .zone-crit i { background: #d13c28; }
+
+.pct.zone-ok { color: #45b972; }
+.pct.zone-warn { color: #efb02a; }
+.pct.zone-crit { color: #ef5b45; }
+
+body.light .pct.zone-ok { color: #2f9e5b; }
+body.light .pct.zone-warn { color: #d99400; }
+body.light .pct.zone-crit { color: #d13c28; }
+
+@media (prefers-reduced-motion: reduce) {
+  .meter i, #widget { transition: none; }
+}

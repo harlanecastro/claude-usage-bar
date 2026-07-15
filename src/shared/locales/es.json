@@ -1,0 +1,57 @@
+{
+  "language": "Español",
+  "widget": {
+    "weeklyUsage": "Uso semanal",
+    "weeklyLimitReached": "Límite semanal alcanzado",
+    "monthlyUsage": "Uso mensual",
+    "resetsIn": "Se reinicia en {duration}",
+    "resetsOn": "Se reinicia el {date}",
+    "loading": "Cargando tu uso",
+    "notSignedIn": "No has iniciado sesión",
+    "clickToSignIn": "Haz clic aquí para iniciar sesión",
+    "loadFailed": "No se pudo cargar tu uso",
+    "clickToRetry": "Haz clic aquí para reintentar"
+  },
+  "duration": {
+    "join": " y ",
+    "lessThanAMinute": "menos de un minuto",
+    "day": "{n} día",
+    "days": "{n} días",
+    "hour": "{n} hora",
+    "hours": "{n} horas",
+    "minute": "{n} minuto",
+    "minutes": "{n} minutos"
+  },
+  "menu": {
+    "openUsagePage": "Abrir la página de uso",
+    "refreshNow": "Actualizar ahora",
+    "settings": "Configuración…",
+    "startAtLogin": "Abrir al iniciar sesión",
+    "signIn": "Iniciar sesión en Claude…",
+    "signOut": "Cerrar sesión",
+    "quit": "Salir"
+  },
+  "settings": {
+    "windowTitle": "Configuración",
+    "language": "Idioma",
+    "languageHint": "Cambia al instante todos los textos del widget, del menú y de esta ventana, sin reiniciar.",
+    "thresholds": "Umbrales de color",
+    "thresholdsHint": "Arrastra los controles para definir dónde la barra se vuelve amarilla y dónde roja.",
+    "green": "Verde",
+    "yellow": "Amarillo",
+    "red": "Rojo",
+    "greenHint": "queda bastante",
+    "yellowHint": "ve más despacio",
+    "redHint": "casi agotado",
+    "showMonthly": "Mostrar también mi límite mensual",
+    "showMonthlyHint": "Añade una segunda barra con el uso adicional que compraste este mes.",
+    "account": "Cuenta",
+    "signedInAs": "Sesión iniciada",
+    "signedOut": "No has iniciado sesión",
+    "signIn": "Iniciar sesión en Claude",
+    "signOut": "Cerrar sesión",
+    "startAtLogin": "Abrir al iniciar sesión",
+    "startAtLoginHint": "Abre Claude Usage Bar automáticamente cuando inicias sesión en tu computadora.",
+    "close": "Cerrar"
+  }
+}

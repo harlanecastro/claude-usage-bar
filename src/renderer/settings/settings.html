@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'self'; script-src 'self'">
+  <title>Settings</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <main class="page">
+
+    <section class="field">
+      <label class="field-label" for="lang" data-i18n="settings.language"></label>
+      <p class="field-hint" data-i18n="settings.languageHint"></p>
+      <select id="lang"></select>
+    </section>
+
+    <hr class="rule">
+
+    <section class="field">
+      <span class="field-label" data-i18n="settings.thresholds"></span>
+      <p class="field-hint" data-i18n="settings.thresholdsHint"></p>
+
+      <div class="zone-track" id="zoneTrack">
+        <div class="zone-fill">
+          <span class="z1" id="z1"></span>
+          <span class="z2" id="z2"></span>
+          <span class="z3" id="z3"></span>
+        </div>
+        <div class="bubble" id="b1"></div>
+        <div class="bubble" id="b2"></div>
+        <div class="handle" id="h1" role="slider" tabindex="0"
+             aria-valuemin="5" aria-valuemax="90" aria-valuenow="60"></div>
+        <div class="handle" id="h2" role="slider" tabindex="0"
+             aria-valuemin="10" aria-valuemax="95" aria-valuenow="85"></div>
+      </div>
+
+      <div class="scale">
+        <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+      </div>
+
+      <div class="legend">
+        <div>
+          <span class="name"><i class="swatch ok"></i><b data-i18n="settings.green"></b></span>
+          <span class="range" id="lg1"></span>
+        </div>
+        <div>
+          <span class="name"><i class="swatch warn"></i><b data-i18n="settings.yellow"></b></span>
+          <span class="range" id="lg2"></span>
+        </div>
+        <div>
+          <span class="name"><i class="swatch crit"></i><b data-i18n="settings.red"></b></span>
+          <span class="range" id="lg3"></span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section class="toggle-row">
+      <div class="txt">
+        <span class="field-label" data-i18n="settings.showMonthly"></span>
+        <p class="field-hint" data-i18n="settings.showMonthlyHint"></p>
+      </div>
+      <button class="switch" id="monthly" role="switch" aria-checked="false"></button>
+    </section>
+
+    <section class="toggle-row">
+      <div class="txt">
+        <span class="field-label" data-i18n="settings.startAtLogin"></span>
+        <p class="field-hint" data-i18n="settings.startAtLoginHint"></p>
+      </div>
+      <button class="switch" id="startAtLogin" role="switch" aria-checked="false"></button>
+    </section>
+
+    <hr class="rule">
+
+    <section class="field">
+      <span class="field-label" data-i18n="settings.account"></span>
+      <div class="account">
+        <span class="status" id="authStatus"></span>
+        <button class="btn" id="authBtn"></button>
+      </div>
+    </section>
+
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

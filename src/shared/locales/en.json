@@ -1,0 +1,57 @@
+{
+  "language": "English",
+  "widget": {
+    "weeklyUsage": "Weekly usage",
+    "weeklyLimitReached": "Weekly limit reached",
+    "monthlyUsage": "Monthly usage",
+    "resetsIn": "Resets in {duration}",
+    "resetsOn": "Resets on {date}",
+    "loading": "Loading your usage",
+    "notSignedIn": "Not signed in",
+    "clickToSignIn": "Click here to sign in",
+    "loadFailed": "Could not load your usage",
+    "clickToRetry": "Click here to try again"
+  },
+  "duration": {
+    "join": " ",
+    "lessThanAMinute": "less than a minute",
+    "day": "{n} day",
+    "days": "{n} days",
+    "hour": "{n} hour",
+    "hours": "{n} hours",
+    "minute": "{n} minute",
+    "minutes": "{n} minutes"
+  },
+  "menu": {
+    "openUsagePage": "Open usage page",
+    "refreshNow": "Refresh now",
+    "settings": "Settings…",
+    "startAtLogin": "Start at login",
+    "signIn": "Sign in to Claude…",
+    "signOut": "Sign out",
+    "quit": "Quit"
+  },
+  "settings": {
+    "windowTitle": "Settings",
+    "language": "Language",
+    "languageHint": "Changes every label in the widget, the menu, and this window immediately — no restart.",
+    "thresholds": "Color thresholds",
+    "thresholdsHint": "Drag the handles to set where the meter turns yellow and where it turns red.",
+    "green": "Green",
+    "yellow": "Yellow",
+    "red": "Red",
+    "greenHint": "plenty left",
+    "yellowHint": "slow down",
+    "redHint": "almost out",
+    "showMonthly": "Show my monthly limit too",
+    "showMonthlyHint": "Adds a second meter for the extra usage you have bought this month.",
+    "account": "Account",
+    "signedInAs": "Signed in",
+    "signedOut": "Not signed in",
+    "signIn": "Sign in to Claude",
+    "signOut": "Sign out",
+    "startAtLogin": "Start at login",
+    "startAtLoginHint": "Opens Claude Usage Bar automatically when you sign in to your computer.",
+    "close": "Close"
+  }
+}
