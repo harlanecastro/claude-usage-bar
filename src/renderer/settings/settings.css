@@ -157,6 +157,72 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- meter checkboxes ---------- */
+
+.meters {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: var(--surface-2);
+  padding: 6px;
+}
+
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  cursor: pointer;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+.meter:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.meter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The last one standing cannot be turned off, and says so by looking inert. */
+.meter[data-locked="true"] { cursor: default; opacity: 0.75; }
+.meter[data-locked="true"]:hover { background: none; }
+
+.box {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  border: 1.5px solid var(--faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.meter[aria-checked="true"] .box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.box::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(1px, -1px);
+  opacity: 0;
+}
+.meter[aria-checked="true"] .box::after { opacity: 1; }
+
+.meters-empty {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 9px 10px;
+}
+
 /* ---------- toggles ---------- */
 
 .toggle-row {

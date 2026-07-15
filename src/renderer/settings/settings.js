@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   settings: null,
   strings: null,
+  meters: [],
 };
 
 const lookup = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), state.strings);
@@ -14,6 +15,7 @@ function applyStrings() {
   }
   document.title = lookup('settings.windowTitle') || 'Settings';
   renderZones();
+  renderMeters();
   renderAuth();
 }
 
@@ -107,8 +109,57 @@ function bindSwitch(id, key) {
   });
 }
 
-bindSwitch('monthly', 'showMonthly');
 bindSwitch('startAtLogin', 'startAtLogin');
+
+// ---------- meters ----------
+
+function renderMeters() {
+  const host = $('meters');
+  host.replaceChildren();
+
+  if (!state.meters.length) {
+    const empty = document.createElement('p');
+    empty.className = 'meters-empty';
+    empty.textContent = lookup('settings.metersLoading') || '';
+    host.appendChild(empty);
+    return;
+  }
+
+  const chosen = state.settings.visibleMeters;
+
+  for (const meter of state.meters) {
+    const on = chosen.includes(meter.key);
+    // The only one left on has to stay on: with none selected the widget would
+    // have nothing to draw and no way back other than this window.
+    const locked = on && chosen.length === 1;
+
+    const row = document.createElement('button');
+    row.className = 'meter';
+    row.type = 'button';
+    row.setAttribute('role', 'checkbox');
+    row.setAttribute('aria-checked', String(on));
+    if (locked) {
+      row.dataset.locked = 'true';
+      row.setAttribute('aria-disabled', 'true');
+    }
+
+    const box = document.createElement('span');
+    box.className = 'box';
+    const label = document.createElement('span');
+    label.textContent = meter.label;
+    row.append(box, label);
+
+    row.addEventListener('click', () => {
+      if (locked) return;
+      const next = on
+        ? chosen.filter((k) => k !== meter.key)
+        : [...chosen, meter.key];
+      push({ visibleMeters: next });
+    });
+
+    host.appendChild(row);
+  }
+}
 
 $('lang').addEventListener('change', (event) => push({ language: event.target.value }));
 
@@ -130,14 +181,15 @@ async function push(patch) {
   const result = await window.settingsApi.set(patch);
   state.settings = result.settings;
   state.strings = result.strings;
+  state.meters = result.meters ?? state.meters;
   applyStrings();
   syncControls();
 }
 
 function syncControls() {
-  $('monthly').setAttribute('aria-checked', String(state.settings.showMonthly));
   $('startAtLogin').setAttribute('aria-checked', String(state.settings.startAtLogin));
   $('lang').value = state.settings.language;
+  renderMeters();
 }
 
 // ---------- boot ----------
@@ -146,6 +198,7 @@ function syncControls() {
   const data = await window.settingsApi.get();
   state.settings = data.settings;
   state.strings = data.strings;
+  state.meters = data.meters ?? [];
   state.signedIn = data.signedIn;
 
   const select = $('lang');

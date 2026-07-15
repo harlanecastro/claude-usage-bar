@@ -3,7 +3,10 @@ const Store = require('electron-store');
 const DEFAULTS = {
   language: 'auto',        // 'auto' follows the OS, otherwise an explicit locale key
   thresholds: { warn: 60, crit: 85 },
-  showMonthly: false,
+  // Which meters the strip shows, by the keys usage.js derives from the API.
+  // Whatever the account actually has decides what is offered; these are just
+  // the two everyone has.
+  visibleMeters: ['session', 'weekly_all'],
   startAtLogin: false,
 };
 
@@ -16,9 +19,18 @@ function getSettings() {
     // Clamped on read as well as write: a hand-edited settings.json should not
     // be able to produce an inverted or out-of-range colour scale.
     thresholds: normalizeThresholds(t.warn, t.crit),
-    showMonthly: store.get('showMonthly', DEFAULTS.showMonthly),
+    visibleMeters: normalizeMeters(store.get('visibleMeters', DEFAULTS.visibleMeters)),
     startAtLogin: store.get('startAtLogin', DEFAULTS.startAtLogin),
   };
+}
+
+/**
+ * At least one meter must survive, or the strip would have nothing to say and
+ * the user would be left staring at an empty taskbar with no way back.
+ */
+function normalizeMeters(list) {
+  const clean = Array.isArray(list) ? [...new Set(list.filter((k) => typeof k === 'string' && k))] : [];
+  return clean.length ? clean : [...DEFAULTS.visibleMeters];
 }
 
 function normalizeThresholds(warn, crit) {
@@ -34,9 +46,9 @@ function setSettings(patch) {
   if (patch.thresholds) {
     store.set('thresholds', normalizeThresholds(patch.thresholds.warn, patch.thresholds.crit));
   }
-  if (patch.showMonthly !== undefined) store.set('showMonthly', !!patch.showMonthly);
+  if (patch.visibleMeters !== undefined) store.set('visibleMeters', normalizeMeters(patch.visibleMeters));
   if (patch.startAtLogin !== undefined) store.set('startAtLogin', !!patch.startAtLogin);
   return getSettings();
 }
 
-module.exports = { store, getSettings, setSettings, normalizeThresholds, DEFAULTS };
+module.exports = { store, getSettings, setSettings, normalizeThresholds, normalizeMeters, DEFAULTS };

@@ -37,50 +37,52 @@ function translator() {
   return new Translator(resolveLanguage(getSettings().language));
 }
 
+/** A meter's human name. Scoped limits take theirs from the API's model name. */
+function meterLabel(t, meter, reached) {
+  switch (meter.kind) {
+    case 'session':
+      return t.t(reached ? 'widget.sessionLimitReached' : 'widget.sessionUsage');
+    case 'weekly_all':
+      return t.t(reached ? 'widget.weeklyLimitReached' : 'widget.weeklyUsage');
+    case 'weekly_scoped':
+      return t.t(reached ? 'widget.weeklyModelLimitReached' : 'widget.weeklyModelUsage',
+        { model: meter.model ?? '' });
+    default:
+      // A meter kind we have never seen. Show whatever the API called it rather
+      // than hiding it: an unknown limit is still a limit the user can hit.
+      return meter.model ?? meter.kind;
+  }
+}
+
+/** The meters the user chose, in the order claude.ai returned them. */
+function selectedMeters() {
+  const chosen = getSettings().visibleMeters;
+  const available = model.data ?? [];
+  const picked = available.filter((m) => chosen.includes(m.key));
+  // Never end up with nothing: a stored selection can name meters this account
+  // no longer has (plan change, model retired).
+  return picked.length ? picked : available.slice(0, 1);
+}
+
 function buildView() {
   const settings = getSettings();
   const t = translator();
   const base = { platform: process.platform, dark: nativeTheme.shouldUseDarkColors };
 
-  const notice = (label, sub) => ({
-    ...base,
-    session: null,
-    weekly: { label, pct: null, sub, zone: 'ok' },
-    monthly: null,
-  });
+  const notice = (label, sub) => ({ ...base, blocks: [{ label, pct: null, sub, zone: 'ok' }] });
 
   if (model.state === 'loading') return notice(t.t('widget.loading'), null);
   if (model.state === 'signedOut') return notice(t.t('widget.notSignedIn'), t.t('widget.clickToSignIn'));
   if (model.state === 'error') return notice(t.t('widget.loadFailed'), t.t('widget.clickToRetry'));
 
-  const { session, weekly, monthly } = model.data;
+  const blocks = selectedMeters().map((meter) => ({
+    label: meterLabel(t, meter, meter.utilization >= 100),
+    pct: Math.min(100, meter.utilization),
+    zone: zoneOf(meter.utilization, settings.thresholds),
+    sub: t.t('widget.resetsIn', { duration: t.duration(meter.resetsAt - Date.now()) }),
+  }));
 
-  // Both windows read the same way, so they are built the same way: the label
-  // switches to a "limit reached" line once there is nothing left to report.
-  const block = (data, usageKey, reachedKey) => ({
-    label: data.utilization >= 100 ? t.t(reachedKey) : t.t(usageKey),
-    pct: Math.min(100, data.utilization),
-    zone: zoneOf(data.utilization, settings.thresholds),
-    sub: t.t('widget.resetsIn', { duration: t.duration(data.resetsAt - Date.now()) }),
-  });
-
-  const view = {
-    ...base,
-    session: session ? block(session, 'widget.sessionUsage', 'widget.sessionLimitReached') : null,
-    weekly: block(weekly, 'widget.weeklyUsage', 'widget.weeklyLimitReached'),
-    monthly: null,
-  };
-
-  if (settings.showMonthly && monthly) {
-    view.monthly = {
-      label: t.t('widget.monthlyUsage'),
-      pct: Math.min(100, monthly.utilization),
-      zone: zoneOf(monthly.utilization, settings.thresholds),
-      sub: IS_MAC ? null : t.t('widget.resetsOn', { date: t.date(monthly.resetsAt) }),
-    };
-  }
-
-  return view;
+  return { ...base, blocks };
 }
 
 function paint() {
@@ -93,7 +95,7 @@ async function refresh() {
     return paint();
   }
   try {
-    model.data = await fetchUsage({ includeMonthly: getSettings().showMonthly });
+    model.data = await fetchUsage();
     model.state = 'ok';
   } catch (err) {
     // A session that Cloudflare or the API rejects is dead, not merely slow —
@@ -144,9 +146,11 @@ function buildMenu() {
   const items = [];
 
   if (model.state === 'ok') {
-    const view = buildView();
-    items.push({ label: `${view.weekly.label} ${Math.round(view.weekly.pct)}%`, enabled: false });
-    items.push({ label: view.weekly.sub, enabled: false });
+    // The reading first, so the menu answers the question before you pick anything.
+    for (const block of buildView().blocks) {
+      items.push({ label: `${block.label} ${Math.round(block.pct)}%`, enabled: false });
+      items.push({ label: block.sub, enabled: false });
+    }
     items.push({ type: 'separator' });
   }
 
@@ -207,24 +211,30 @@ function openSettings() {
 ipcMain.on('widget:rendered', (_e, size) => widget && widget.onRendered(size));
 ipcMain.on('widget:click', (_e, button) => handleClick(button));
 
+/** What the settings window offers to toggle: whatever this account actually has. */
+function availableMeters() {
+  const t = translator();
+  return (model.data ?? []).map((meter) => ({
+    key: meter.key,
+    label: meterLabel(t, meter, false),
+  }));
+}
+
 ipcMain.handle('settings:get', () => ({
   settings: getSettings(),
   languages: availableLanguages(),
+  meters: availableMeters(),
   strings: translator().dict,
   signedIn: auth.isSignedIn(),
   resolvedLanguage: resolveLanguage(getSettings().language),
 }));
 
 ipcMain.handle('settings:set', async (_e, patch) => {
-  const before = getSettings();
   const after = setSettings(patch);
-
-  // Turning the monthly meter on needs a payload we did not request last poll.
-  if (after.showMonthly && !before.showMonthly && model.state === 'ok') await refresh();
-  else paint();
-
+  paint();
   return {
     settings: after,
+    meters: availableMeters(),
     strings: translator().dict,
     resolvedLanguage: resolveLanguage(after.language),
   };
