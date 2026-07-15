@@ -6,11 +6,30 @@ you when it resets.
 
 - **Windows** — two lines, inside the taskbar itself (not floating over it).
 - **macOS** — the same information on one line, because the menu bar is shorter.
+- **Pick your meters** — current session, weekly, per-model, and what Claude Code
+  is doing right now. Any subset; at least one.
 - **i18n** — English, Português (Brasil), Español; follows the OS by default.
 - **Colour thresholds** — you decide where the meter turns yellow and red.
-- **Optional monthly meter** — shows the extra usage you bought this month.
 
-Left click opens `claude.ai/new#settings/usage`. Right click opens the menu.
+Left click opens `claude.ai/new#settings/usage`. Right click opens the menu, which
+can toggle meters too.
+
+## Claude Code status
+
+Optionally shows what Claude Code is doing — `Editing 1m 26s`, `Thinking… 12s`,
+and above all **`Waiting for you`** in amber when it needs a permission answer,
+with Clawd the crab animating while there is work happening.
+
+It needs hooks, which are not installed by default:
+
+```bash
+npm run install-hooks     # merges into ~/.claude/settings.json, backs it up first
+node hooks/install.js --remove
+```
+
+Then start a new Claude Code session. Skip this if you already run
+[claude-status-bar](https://github.com/harlanecastro/claude-status-bar) — its hooks
+write the same files and feed this just as well.
 
 ## Status
 
@@ -124,9 +143,12 @@ layered windows, so both this strip and TrafficMonitor's vanish from the shot.
 ## Layout
 
 ```
+hooks/              Claude Code hooks that report status, plus their installer
+scripts/            build-crab-frames.js regenerates the animation frames
 src/
   main/
     index.js          lifecycle, polling, view model, menu
+    claude-status.js  reads ~/.claude/statusbar/state.d, picks the lead session
     win32-taskbar.js  SetParent injection + slot measurement (koffi/Win32)
     widget.js         hosts the one renderer: real window on Win, Tray image on Mac
     auth.js           login window, sessionKey, keychain
@@ -151,6 +173,13 @@ Same renderer, different delivery: the window is never shown, it renders offscre
 gets captured with `capturePage()`, and the bitmap becomes the `NSStatusItem` image
 via `Tray`. Left click and right click are wired to the tray's own events. Written
 against the Electron API but never executed — expect to shake bugs out on first run.
+
+## Credits
+
+The status feature is a port of
+[claude-status-bar](https://github.com/harlanecastro/claude-status-bar) — its hook
+contract, its priority rule (a session waiting on you is never buried behind one
+merely thinking), its recovery nets for frozen state, and Clawd the crab.
 
 ## License
 

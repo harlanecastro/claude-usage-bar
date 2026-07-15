@@ -2,13 +2,16 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <!-- img-src data: is required: the status icon frames are inline data URIs used
+       as CSS masks, and mask-image is policed by img-src. -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; style-src 'self'; script-src 'self'">
+        content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data:">
   <title>Claude Usage Bar</title>
   <link rel="stylesheet" href="widget.css">
 </head>
 <body>
   <div id="widget" role="button" tabindex="-1"></div>
+  <script src="../../shared/status-frames.js"></script>
   <script src="widget.js"></script>
 </body>
 </html>

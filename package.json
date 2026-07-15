@@ -11,7 +11,8 @@
     "debug": "electron . --debug",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac"
+    "dist:mac": "electron-builder --mac",
+    "install-hooks": "node hooks/install.js"
   },
   "dependencies": {
     "electron-store": "^8.2.0",

@@ -14,6 +14,29 @@
     "loadFailed": "Não foi possível carregar seu uso",
     "clickToRetry": "Clique aqui para tentar de novo"
   },
+  "status": {
+    "name": "Status do Claude",
+    "thinking": "Pensando…",
+    "working": "Trabalhando…",
+    "permission": "Aguardando interação",
+    "idle": "Claude está ocioso",
+    "notInstalled": "Os hooks de status não estão instalados",
+    "tools": {
+      "Bash": "Executando comando",
+      "Edit": "Editando",
+      "MultiEdit": "Editando",
+      "NotebookEdit": "Editando",
+      "Write": "Escrevendo",
+      "Read": "Lendo",
+      "Grep": "Buscando",
+      "Glob": "Buscando",
+      "WebFetch": "Verificando na internet",
+      "WebSearch": "Pesquisando na internet",
+      "Task": "Delegando",
+      "TodoWrite": "Planejando",
+      "default": "Usando ferramenta"
+    }
+  },
   "duration": {
     "join": " e ",
     "lessThanAMinute": "menos de um minuto",

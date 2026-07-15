@@ -5,6 +5,8 @@ const { getSettings, setSettings } = require('./config');
 const { Translator, resolveLanguage, availableLanguages } = require('./i18n');
 const auth = require('./auth');
 const { fetchUsage, isAuthError } = require('./usage');
+const { currentStatus } = require('./claude-status');
+const { CRAB_FRAMES, CRAB_FPS } = require('../shared/status-frames');
 const { Widget, IS_MAC } = require('./widget');
 
 // NOTE: do not add app.disableHardwareAcceleration() here. With the GPU off,
@@ -15,12 +17,21 @@ const USAGE_PAGE = 'https://claude.ai/new#settings/usage';
 const POLL_INTERVAL = 5 * 60 * 1000;
 const TICK_INTERVAL = 30 * 1000;   // keeps the reset countdown honest between polls
 
+// The status block reads local files and carries a live seconds clock, so it
+// needs its own faster beat. The key is a real meter key like any other, so it
+// sits in the same picker and the same visibleMeters list.
+const STATUS_KEY = 'claude_status';
+const STATUS_INTERVAL = 1000;
+const ANIM_INTERVAL = Math.round(1000 / CRAB_FPS);
+
 if (process.platform === 'win32') app.setAppUserModelId('com.harlanecastro.claudeusagebar');
 
 let widget = null;
 let settingsWindow = null;
 let pollTimer = null;
 let tickTimer = null;
+let statusTimer = null;
+let animFrame = 0;
 
 const model = {
   state: 'loading',   // loading | ok | signedOut | error
@@ -61,7 +72,57 @@ function selectedMeters() {
   const picked = available.filter((m) => chosen.includes(m.key));
   // Never end up with nothing: a stored selection can name meters this account
   // no longer has (plan change, model retired).
-  return picked.length ? picked : available.slice(0, 1);
+  if (picked.length) return picked;
+  return chosen.includes(STATUS_KEY) ? [] : available.slice(0, 1);
+}
+
+/** "1m 3s" / "43s" — Claude Code's own elapsed-clock style. */
+function elapsed(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+/**
+ * The status block: what Claude Code is doing right now.
+ *
+ * Returns null when nothing is worth saying, so an idle Claude takes no room in
+ * the bar rather than parking on a permanent "idle".
+ */
+function statusBlock(t) {
+  const status = currentStatus();
+  if (!status) return null;
+
+  if (status.state === 'permission') {
+    return {
+      kind: 'status',
+      label: t.t('status.permission'),
+      sub: status.project,
+      // Amber and still. A spinner would say "busy"; this is the opposite —
+      // nothing moves until you act, and that is the whole point of the state.
+      tone: 'amber',
+      animate: false,
+      elapsed: null,
+    };
+  }
+
+  const label = status.state === 'tool'
+    ? (t.t(`status.tools.${status.tool}`) === `status.tools.${status.tool}`
+      ? t.t('status.tools.default')
+      : t.t(`status.tools.${status.tool}`))
+    : t.t('status.thinking');
+
+  return {
+    kind: 'status',
+    label,
+    sub: status.project,
+    tone: null,
+    animate: true,
+    frame: animFrame,
+    elapsed: status.startedAt > 0
+      ? elapsed(Math.max(0, Math.floor(Date.now() / 1000) - status.startedAt))
+      : null,
+  };
 }
 
 function buildView() {
@@ -81,6 +142,15 @@ function buildView() {
     zone: zoneOf(meter.utilization, settings.thresholds),
     sub: t.t('widget.resetsIn', { duration: t.duration(meter.resetsAt - Date.now()) }),
   }));
+
+  // Status leads: it is the only block that changes second to second, and the
+  // one you look for when Claude is waiting on you.
+  if (settings.visibleMeters.includes(STATUS_KEY)) {
+    const status = statusBlock(t);
+    if (status) blocks.unshift(status);
+  }
+
+  if (!blocks.length) return notice(t.t('status.idle'), null);
 
   return { ...base, blocks };
 }
@@ -116,6 +186,32 @@ function schedulePolling() {
   if (tickTimer) clearInterval(tickTimer);
   pollTimer = setInterval(refresh, POLL_INTERVAL);
   tickTimer = setInterval(() => { if (model.state === 'ok') paint(); }, TICK_INTERVAL);
+  armStatusTimer();
+}
+
+/**
+ * The status block beats to its own clock, and re-arms itself each time because
+ * the right cadence depends on what Claude is doing.
+ *
+ * Animating costs a full render and screen capture per frame, so it only runs at
+ * that rate while there is something to animate. A permission prompt is
+ * deliberately still, and an idle Claude only needs the once-a-second check that
+ * notices work starting.
+ */
+function armStatusTimer() {
+  if (statusTimer) clearTimeout(statusTimer);
+  statusTimer = null;
+
+  if (!getSettings().visibleMeters.includes(STATUS_KEY)) return;
+
+  const status = currentStatus();
+  const animating = !!status && status.state !== 'permission';
+
+  statusTimer = setTimeout(() => {
+    if (animating) animFrame = (animFrame + 1) % CRAB_FRAMES.length;
+    paint();
+    armStatusTimer();
+  }, animating ? ANIM_INTERVAL : STATUS_INTERVAL);
 }
 
 // ---------- interactions ----------
@@ -152,6 +248,7 @@ function toggleMeter(key) {
 
   setSettings({ visibleMeters: next });
   paint();
+  armStatusTimer(); // the status block may have just been switched on or off
   // The settings window may be open on the same setting — keep it honest.
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send('settings:changed');
@@ -251,13 +348,19 @@ function openSettings() {
 ipcMain.on('widget:rendered', (_e, size) => widget && widget.onRendered(size));
 ipcMain.on('widget:click', (_e, button) => handleClick(button));
 
-/** What the settings window offers to toggle: whatever this account actually has. */
+/**
+ * What the settings window and the context menu offer to toggle: whatever this
+ * account actually has, plus the local Claude Code status.
+ */
 function availableMeters() {
   const t = translator();
-  return (model.data ?? []).map((meter) => ({
-    key: meter.key,
-    label: meterLabel(t, meter, false),
-  }));
+  return [
+    { key: STATUS_KEY, label: t.t('status.name') },
+    ...(model.data ?? []).map((meter) => ({
+      key: meter.key,
+      label: meterLabel(t, meter, false),
+    })),
+  ];
 }
 
 ipcMain.handle('settings:get', () => ({
@@ -272,6 +375,7 @@ ipcMain.handle('settings:get', () => ({
 ipcMain.handle('settings:set', async (_e, patch) => {
   const after = setSettings(patch);
   paint();
+  armStatusTimer();
   return {
     settings: after,
     meters: availableMeters(),
@@ -328,6 +432,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     if (pollTimer) clearInterval(pollTimer);
     if (tickTimer) clearInterval(tickTimer);
+    if (statusTimer) clearTimeout(statusTimer);
     if (widget) widget.destroy();
   });
 

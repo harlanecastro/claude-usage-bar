@@ -23,11 +23,34 @@ const meter = (pct, zone) => {
   return track;
 };
 
+/**
+ * Clawd the crab, as a CSS mask rather than an image, so he is painted in the
+ * bar's own text colour and adapts to a light or dark taskbar for free.
+ *
+ * The frame index comes from the main process: this page is captured to a
+ * bitmap, so a CSS animation would never reach the taskbar — only what happens
+ * to be painted at capture time does.
+ *
+ * A still frame 0 stands in when there is nothing to animate: a permission
+ * prompt is deliberately motionless, since a spinner would say "busy" when the
+ * whole point is that nothing moves until you act.
+ */
+const icon = (block) => {
+  const { CRAB_FRAMES } = globalThis.StatusFrames;
+  const node = el('span', `icon${block.tone ? ` tone-${block.tone}` : ''}`);
+  const src = CRAB_FRAMES[(block.animate ? block.frame : 0) % CRAB_FRAMES.length];
+  node.style.webkitMaskImage = `url("${src}")`;
+  node.style.maskImage = `url("${src}")`;
+  return node;
+};
+
 function winBlock(block) {
   const group = el('div', 'group');
   const line1 = el('div', 'line1');
 
-  line1.appendChild(el('span', 'label', block.label));
+  if (block.kind === 'status') line1.appendChild(icon(block));
+  line1.appendChild(el('span', `label${block.tone ? ` tone-${block.tone}` : ''}`, block.label));
+  if (block.elapsed) line1.appendChild(el('span', 'clock', block.elapsed));
   if (block.pct != null) {
     line1.appendChild(meter(block.pct, block.zone));
     line1.appendChild(el('span', `pct zone-${block.zone}`, `${Math.round(block.pct)}%`));
@@ -39,7 +62,9 @@ function winBlock(block) {
 }
 
 function macBlock(block, parts) {
-  parts.push(el('span', null, block.label));
+  if (block.kind === 'status') parts.push(icon(block));
+  parts.push(el('span', block.tone ? `tone-${block.tone}` : null, block.label));
+  if (block.elapsed) parts.push(el('span', 'clock', block.elapsed));
   if (block.pct != null) {
     parts.push(el('span', `pct zone-${block.zone}`, `${Math.round(block.pct)}%`));
     parts.push(meter(block.pct, block.zone));

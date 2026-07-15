@@ -120,6 +120,33 @@ body.mac .meter { width: 52px; height: 5px; border-radius: 2.5px; }
 }
 body.win .pct { min-width: 34px; text-align: right; }
 
+/* ---------- Claude status ---------- */
+
+/* A mask, not an image: the icon inherits currentColor, so it reads correctly on
+   a light bar and a dark one without shipping two sets of frames. */
+.icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+body.mac .icon { width: 13px; height: 13px; }
+
+/* Amber is the "this one needs you" colour, borrowed from claude-status-bar. */
+.tone-amber { color: #f2ba2e; }
+body.light .tone-amber { color: #b07d00; }
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+}
+
 .zone-ok i { background: #45b972; }
 .zone-warn i { background: #efb02a; }
 .zone-crit i { background: #ef5b45; }

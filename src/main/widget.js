@@ -49,6 +49,14 @@ class Widget {
 
     this.win.loadFile(path.join(__dirname, '..', 'renderer', 'widget', 'widget.html'));
 
+    // The widget renderer is never shown, so its console is otherwise unreachable
+    // and its errors are silent. --debug surfaces them.
+    if (process.argv.includes('--debug')) {
+      this.win.webContents.on('console-message', (_e, _level, message) => {
+        console.log('[widget renderer]', message);
+      });
+    }
+
     if (IS_MAC) {
       this.tray = new Tray(nativeImage.createEmpty());
       this.tray.on('click', () => this.onClick('left'));

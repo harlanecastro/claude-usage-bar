@@ -14,6 +14,29 @@
     "loadFailed": "Could not load your usage",
     "clickToRetry": "Click here to try again"
   },
+  "status": {
+    "name": "Claude status",
+    "thinking": "Thinking…",
+    "working": "Working…",
+    "permission": "Waiting for you",
+    "idle": "Claude is idle",
+    "notInstalled": "Status hooks are not installed",
+    "tools": {
+      "Bash": "Running a command",
+      "Edit": "Editing",
+      "MultiEdit": "Editing",
+      "NotebookEdit": "Editing",
+      "Write": "Writing",
+      "Read": "Reading",
+      "Grep": "Searching",
+      "Glob": "Searching",
+      "WebFetch": "Checking the web",
+      "WebSearch": "Searching the web",
+      "Task": "Delegating",
+      "TodoWrite": "Planning",
+      "default": "Using a tool"
+    }
+  },
   "duration": {
     "join": " ",
     "lessThanAMinute": "less than a minute",
