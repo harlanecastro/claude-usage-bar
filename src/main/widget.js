@@ -33,10 +33,8 @@ class Widget {
       height: IS_MAC ? MENU_BAR_HEIGHT : 48,
       show: false,
       frame: false,
-      // Opaque: the Windows strip blits these pixels with StretchDIBits, which
-      // ignores alpha, so the renderer paints its own taskbar-coloured
-      // background — the same thing TrafficMonitor does with FillRect.
-      transparent: IS_MAC,
+      // The capture must carry alpha: both surfaces composite it per-pixel.
+      transparent: true,
       resizable: true,
       skipTaskbar: true,
       focusable: false,

@@ -18,9 +18,9 @@ Left click opens `claude.ai/new#settings/usage`. Right click opens the menu.
 | --- | --- |
 | Windows taskbar injection + rendering | verified on Windows 11 build 26200 |
 | Widget layout, transparency, positioning | verified |
+| Left / right click | verified |
 | i18n + locale auto-detection | verified |
-| Click / context menu handling | **unverified — see Known issues** |
-| Live usage data | **unverified** (needs a real sign-in) |
+| Live usage data | verified |
 | macOS | **unverified** — written, never run; no Mac available yet |
 
 ## Running
@@ -56,52 +56,69 @@ Node-shaped requests from Electron on header fingerprint alone.
 
 This is the part worth understanding before changing anything.
 
-The widget is **not** an always-on-top window sitting over the taskbar. It is
-`SetParent`'d into explorer.exe's `Shell_TrayWnd` and becomes a real child of it —
-the same technique [TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor)
-uses. That is why nothing can cover it and why it slides away with auto-hide.
+The strip is **not** an always-on-top window sitting over the taskbar, and it is
+**not** the Electron window either. It is a plain Win32 window we create and own,
+`SetParent`'d into explorer.exe's `Shell_TrayWnd` — the same shape
+[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) uses. That is why
+nothing can cover it and why it slides away with auto-hide.
 
 Windows has no supported API for this. Deskbands were the official route and were
 removed in Windows 11. `SetParent` is what is left.
 
-### Findings from `spike/`
+The widget itself is still the HTML renderer in `src/renderer/widget/`. It paints
+offscreen, gets captured with `capturePage()`, and the bitmap is pushed into the
+native window with `UpdateLayeredWindow` — mirroring the macOS path, which feeds
+the same bitmap to `NSStatusItem`.
 
-Verified against a live Windows 11 26200 taskbar. Each of these cost an iteration:
+### Why not just reparent the Electron window
 
-- **Never call `app.disableHardwareAcceleration()`.** With the GPU off, Chromium
-  stops painting once reparented. The window is there, `IsWindowVisible` is true,
-  and nothing draws.
-- **Keep `WS_EX_LAYERED`.** Stripping it forces the window opaque, and the widget
-  becomes a grey rectangle pasted over the taskbar acrylic. With it, the acrylic
-  shows through and the widget looks native.
-- **Electron's `setContentSize` must not be used on Windows after attaching.** It
-  re-applies the bounds Electron cached before the reparent, dragging the window
-  out of the taskbar and up over the wallpaper. `SetWindowPos` owns the geometry.
-- **Position from live measurements, not assumptions.** The free span runs from the
-  right edge of `ReBarWindow32` to the left edge of `TrayNotifyWnd`. Both move —
-  the icon band grows as apps open and Win11 centres it unless you left-align.
-- **`focusable: false` is required** so the widget does not steal focus, but a
-  `WS_EX_NOACTIVATE` window cannot host a popup menu: the menu dismisses itself the
-  frame it appears, silently and with no error.
+Because it renders and then never receives a single mouse message. A control
+experiment settled it: the same window, the same window-procedure subclass and the
+same synthetic click worked while the window floated on the desktop, and went
+silent once embedded. TrafficMonitor embeds one plain Win32 window; Electron
+embeds Chromium, which nests a `Chrome_RenderWidgetHostHWND` inside a
+`Chrome_WidgetWin_1` and runs its own input plumbing that does not deliver there.
 
-`spike/whats-under-cursor.js` asks Windows which HWND is under the cursor. It
-confirmed the OS hit-tests the widget correctly:
+### Load-bearing details
 
-```
-(1305,1050) -> Chrome_RenderWidgetHostHWND <- Chrome_WidgetWin_1 <- Shell_TrayWnd
-(923,1055)  -> Shell_TrayWnd
-```
+Read off a running TrafficMonitor sitting in the same taskbar, not guessed:
+
+- **`WS_POPUP`, kept after `SetParent`.** This is the opposite of what the
+  `SetParent` documentation advises ("clear WS_POPUP and set WS_CHILD"). A real
+  `WS_CHILD` of `Shell_TrayWnd` renders fine but never sees the mouse: hit-testing
+  runs through the Win11 XAML taskbar, which eats it.
+- **`WS_EX_LAYERED`, or nothing appears at all.** The window paints into its own DC
+  perfectly happily — `StretchDIBits` reports every scanline written — but DWM does
+  not composite a non-layered reparented popup. The taskbar just stays empty.
+- **`UpdateLayeredWindow`, not `WM_PAINT`.** `StretchDIBits` discards alpha, which
+  forces an opaque taskbar-coloured background. Per-pixel alpha lets the acrylic
+  through.
+- **The background is 1/255 alpha, not zero.** Layered windows hit-test per pixel,
+  so a genuinely empty background would be click-through everywhere except the
+  glyphs.
+- **Never call `app.disableHardwareAcceleration()`.** With the GPU off Chromium
+  stops painting, and the capture comes back blank.
+- **No `requestAnimationFrame` in the renderer.** The window is never shown, a
+  hidden window produces no frames, and the callback would never run.
+- **Position from live measurements.** The free span runs from the right edge of
+  `ReBarWindow32` to the left edge of `TrayNotifyWnd`. Both move: the icon band
+  grows as apps open, and Win11 centres it unless the taskbar is left-aligned.
+
+### A warning about measuring this
+
+`mouse_event` / `SendInput` do **not** deliver clicks over the taskbar. Verified by
+injecting a right-click into TrafficMonitor's own window, which works with a real
+mouse and did nothing when synthesised. Any "the click never arrives" conclusion
+drawn from synthetic input here is worthless — check against a real mouse.
+
+Screen captures need `BitBlt` with `CAPTUREBLT`; `CopyFromScreen` silently omits
+layered windows, so both this strip and TrafficMonitor's vanish from the shot.
 
 ## Known issues
 
-- **Right click also opens the taskbar's own menu.** Unhandled `WM_CONTEXTMENU`
-  bubbles up to the parent window, and our parent is `Shell_TrayWnd`. Needs the
-  message swallowed before it reaches explorer.
-- **Click handling is unverified end to end.** The OS routes the cursor to the
-  widget, but that the renderer reacts has not been observed.
-- **Reparenting attaches our input queue to explorer's.** If this renderer hangs,
-  it can take the shell's responsiveness with it. This is inherent to the
-  technique and is why TrafficMonitor carries the same reputation.
+- **Reparenting attaches our input queue to explorer's.** If this process hangs it
+  can take the shell's responsiveness with it. Inherent to the technique, and why
+  TrafficMonitor carries the same reputation.
 - **Antivirus may block the reparent.** Reported against TrafficMonitor too.
 
 ## Layout

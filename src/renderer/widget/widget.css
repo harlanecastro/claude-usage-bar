@@ -14,16 +14,17 @@ html, body {
 }
 
 /*
- * macOS keeps its alpha: the tray image is composited over the menu bar and the
- * blur shows through. Windows blits with StretchDIBits, which drops alpha, so the
- * strip paints its own taskbar-coloured background — the same thing the reference
- * does with FillRect(back_color), and a genuinely transparent window there turned
- * out to be click-through anyway.
+ * Both surfaces composite with per-pixel alpha, so the widget paints no
+ * background of its own and the menu bar / taskbar acrylic shows through.
+ *
+ * Windows is not quite zero, though: its strip is a layered window, and layered
+ * windows hit-test per pixel. A fully transparent background would be
+ * click-through everywhere except the glyphs themselves, sending clicks to the
+ * taskbar behind. 1/255 alpha is invisible and makes the whole strip a target.
  */
 html { background: transparent; }
 body.mac { background: transparent; }
-body.win { background: #202020; }
-body.win.light { background: #f3f3f3; }
+body.win { background: rgba(0, 0, 0, 0.004); }
 
 /* The window is as tall as its host bar; the content centres inside it. */
 body {

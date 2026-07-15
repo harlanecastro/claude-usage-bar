@@ -35,6 +35,15 @@ const HANDLE = 'void*';
 const RECT = koffi.struct('RECT', { left: 'long', top: 'long', right: 'long', bottom: 'long' });
 const POINT = koffi.struct('POINT', { x: 'long', y: 'long' });
 
+const SIZE = koffi.struct('SIZE', { cx: 'long', cy: 'long' });
+
+const BLENDFUNCTION = koffi.struct('BLENDFUNCTION', {
+  BlendOp: 'uint8',
+  BlendFlags: 'uint8',
+  SourceConstantAlpha: 'uint8',
+  AlphaFormat: 'uint8',
+});
+
 const PAINTSTRUCT = koffi.struct('PAINTSTRUCT', {
   hdc: HANDLE,
   fErase: 'int',
@@ -100,9 +109,19 @@ const BeginPaint = user32.func('__stdcall', 'BeginPaint', HANDLE, [HWND, koffi.o
 const EndPaint = user32.func('__stdcall', 'EndPaint', 'bool', [HWND, koffi.pointer(PAINTSTRUCT)]);
 const GetCursorPos = user32.func('__stdcall', 'GetCursorPos', 'bool', [koffi.out(koffi.pointer(POINT))]);
 
-const StretchDIBits = gdi32.func('__stdcall', 'StretchDIBits', 'int',
-  [HANDLE, 'int', 'int', 'int', 'int', 'int', 'int', 'int', 'int',
-    'void*', koffi.pointer(BITMAPINFOHEADER), 'uint', 'uint32']);
+const GetDC = user32.func('__stdcall', 'GetDC', HANDLE, [HWND]);
+const ReleaseDC = user32.func('__stdcall', 'ReleaseDC', 'int', [HWND, HANDLE]);
+const UpdateLayeredWindow = user32.func('__stdcall', 'UpdateLayeredWindow', 'bool',
+  [HWND, HANDLE, koffi.pointer(POINT), koffi.pointer(SIZE), HANDLE, koffi.pointer(POINT),
+    'uint32', koffi.pointer(BLENDFUNCTION), 'uint32']);
+
+const CreateCompatibleDC = gdi32.func('__stdcall', 'CreateCompatibleDC', HANDLE, [HANDLE]);
+const DeleteDC = gdi32.func('__stdcall', 'DeleteDC', 'bool', [HANDLE]);
+const CreateDIBSection = gdi32.func('__stdcall', 'CreateDIBSection', HANDLE,
+  [HANDLE, koffi.pointer(BITMAPINFOHEADER), 'uint', koffi.out(koffi.pointer('void *')), HANDLE, 'uint32']);
+const SelectObject = gdi32.func('__stdcall', 'SelectObject', HANDLE, [HANDLE, HANDLE]);
+const DeleteObject = gdi32.func('__stdcall', 'DeleteObject', 'bool', [HANDLE]);
+const RtlMoveMemory = kernel32.func('__stdcall', 'RtlMoveMemory', 'void', ['void*', 'void*', 'size_t']);
 
 // --- constants ---
 
@@ -111,7 +130,9 @@ const CS_HREDRAW = 0x0002, CS_VREDRAW = 0x0001;
 const WS_POPUP = 0x80000000, WS_VISIBLE = 0x10000000, WS_CLIPSIBLINGS = 0x04000000;
 const WS_EX_TOOLWINDOW = 0x00000080;
 const WS_EX_LAYERED = 0x00080000;
-const LWA_ALPHA = 0x00000002;
+const ULW_ALPHA = 0x00000002;
+const AC_SRC_OVER = 0x00;
+const AC_SRC_ALPHA = 0x01;
 const HWND_TOP = 0;
 const SWP_NOSIZE = 0x0001, SWP_SHOWWINDOW = 0x0040, SWP_NOACTIVATE = 0x0010;
 const SW_SHOW = 5;
@@ -182,11 +203,10 @@ class TaskbarStrip {
     const proc = (hwnd, msg, wParam, lParam) => {
       const self = TaskbarStrip.current;
       switch (msg) {
+        // No WM_PAINT handling: the pixels arrive through UpdateLayeredWindow,
+        // which bypasses the paint cycle entirely.
         case WM_ERASEBKGND:
-          return 1n; // WM_PAINT covers every pixel; erasing first would flicker
-        case WM_PAINT:
-          if (self) self.paint(hwnd);
-          return 0n;
+          return 1n;
         case WM_LBUTTONUP:
           if (self) setImmediate(() => self.onClick && self.onClick('left'));
           return 0n;
@@ -258,10 +278,8 @@ class TaskbarStrip {
     );
     if (!this.hwnd) return false;
 
-    // Opaque: alpha 255 over the whole window. The widget paints its own
-    // taskbar-coloured background, so there is nothing to see through.
-    SetLayeredWindowAttributes(this.hwnd, 0, 255, LWA_ALPHA);
-
+    // Deliberately no SetLayeredWindowAttributes here: it and UpdateLayeredWindow
+    // are mutually exclusive, and once the former has been used the latter fails.
     if (!SetParent(this.hwnd, BigInt(hTaskbar))) {
       DestroyWindow(this.hwnd);
       this.hwnd = null;
@@ -280,13 +298,30 @@ class TaskbarStrip {
     this.height = height;
     if (!this.hwnd) return;
     this.position();
-    InvalidateRect(this.hwnd, null, false);
+    this.compose();
   }
 
-  paint(hwnd) {
-    const ps = {};
-    const hdc = BeginPaint(hwnd, ps);
-    if (hdc && this.bitmap) {
+  /**
+   * Pushes the bitmap to the window with per-pixel alpha.
+   *
+   * UpdateLayeredWindow rather than WM_PAINT + StretchDIBits, because
+   * StretchDIBits throws the alpha channel away — which is why this widget used
+   * to need an opaque taskbar-coloured background. Here the transparent parts
+   * stay transparent and the taskbar's acrylic shows through.
+   *
+   * Note the widget still paints a 1/255 alpha background rather than nothing:
+   * layered windows hit-test per pixel, so genuinely empty pixels would be
+   * click-through and only the glyphs would be clickable.
+   */
+  compose() {
+    if (!this.hwnd || !this.bitmap) return;
+
+    const screenDC = GetDC(0);
+    const memDC = CreateCompatibleDC(screenDC);
+    let hbm = null;
+    let old = null;
+
+    try {
       const bmi = {
         biSize: koffi.sizeof(BITMAPINFOHEADER),
         biWidth: this.width,
@@ -300,10 +335,31 @@ class TaskbarStrip {
         biClrUsed: 0,
         biClrImportant: 0,
       };
-      StretchDIBits(hdc, 0, 0, this.width, this.height, 0, 0, this.width, this.height,
-        this.bitmap, bmi, DIB_RGB_COLORS, SRCCOPY);
+
+      const bits = [null];
+      hbm = CreateDIBSection(memDC, bmi, DIB_RGB_COLORS, bits, null, 0);
+      if (!hbm || !bits[0]) return;
+
+      RtlMoveMemory(bits[0], this.bitmap, this.width * this.height * 4);
+      old = SelectObject(memDC, hbm);
+
+      const size = { cx: this.width, cy: this.height };
+      const src = { x: 0, y: 0 };
+      const blend = {
+        BlendOp: AC_SRC_OVER,
+        BlendFlags: 0,
+        SourceConstantAlpha: 255,
+        AlphaFormat: AC_SRC_ALPHA, // per-pixel alpha, premultiplied
+      };
+
+      // pptDst null: SetWindowPos owns the position, this owns the pixels.
+      UpdateLayeredWindow(this.hwnd, screenDC, null, size, memDC, src, 0, blend, ULW_ALPHA);
+    } finally {
+      if (old) SelectObject(memDC, old);
+      if (hbm) DeleteObject(hbm);
+      DeleteDC(memDC);
+      ReleaseDC(0, screenDC);
     }
-    EndPaint(hwnd, ps);
   }
 
   position() {
@@ -340,7 +396,7 @@ class TaskbarStrip {
         this.hwnd = null;
         if (this.create()) {
           this.position();
-          InvalidateRect(this.hwnd, null, false);
+          this.compose();
         }
         return;
       }
