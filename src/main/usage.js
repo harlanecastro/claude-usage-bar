@@ -43,7 +43,16 @@ async function fetchUsage({ includeMonthly = false } = {}) {
   // handed back an empty shell — a dead session — not genuine zero usage.
   if (!seven || !seven.resets_at) throw new Error('EmptyUsagePayload');
 
+  const five = usage?.five_hour;
+
   return {
+    // The rolling 5-hour window, which claude.ai labels "Current session".
+    session: five && five.resets_at
+      ? {
+        utilization: Math.max(0, five.utilization || 0),
+        resetsAt: new Date(five.resets_at).getTime(),
+      }
+      : null,
     weekly: {
       utilization: Math.max(0, seven.utilization || 0),
       resetsAt: new Date(seven.resets_at).getTime(),

@@ -42,23 +42,32 @@ function buildView() {
   const t = translator();
   const base = { platform: process.platform, dark: nativeTheme.shouldUseDarkColors };
 
-  const notice = (label, sub) => ({ ...base, weekly: { label, pct: null, sub, zone: 'ok' }, monthly: null });
+  const notice = (label, sub) => ({
+    ...base,
+    session: null,
+    weekly: { label, pct: null, sub, zone: 'ok' },
+    monthly: null,
+  });
 
   if (model.state === 'loading') return notice(t.t('widget.loading'), null);
   if (model.state === 'signedOut') return notice(t.t('widget.notSignedIn'), t.t('widget.clickToSignIn'));
   if (model.state === 'error') return notice(t.t('widget.loadFailed'), t.t('widget.clickToRetry'));
 
-  const { weekly, monthly } = model.data;
-  const exceeded = weekly.utilization >= 100;
+  const { session, weekly, monthly } = model.data;
+
+  // Both windows read the same way, so they are built the same way: the label
+  // switches to a "limit reached" line once there is nothing left to report.
+  const block = (data, usageKey, reachedKey) => ({
+    label: data.utilization >= 100 ? t.t(reachedKey) : t.t(usageKey),
+    pct: Math.min(100, data.utilization),
+    zone: zoneOf(data.utilization, settings.thresholds),
+    sub: t.t('widget.resetsIn', { duration: t.duration(data.resetsAt - Date.now()) }),
+  });
 
   const view = {
     ...base,
-    weekly: {
-      label: exceeded ? t.t('widget.weeklyLimitReached') : t.t('widget.weeklyUsage'),
-      pct: Math.min(100, weekly.utilization),
-      zone: zoneOf(weekly.utilization, settings.thresholds),
-      sub: t.t('widget.resetsIn', { duration: t.duration(weekly.resetsAt - Date.now()) }),
-    },
+    session: session ? block(session, 'widget.sessionUsage', 'widget.sessionLimitReached') : null,
+    weekly: block(weekly, 'widget.weeklyUsage', 'widget.weeklyLimitReached'),
     monthly: null,
   };
 

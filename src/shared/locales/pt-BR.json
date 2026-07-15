@@ -1,6 +1,8 @@
 {
   "language": "Português (Brasil)",
   "widget": {
+    "sessionUsage": "Sessão atual",
+    "sessionLimitReached": "Limite da sessão atingido",
     "weeklyUsage": "Uso semanal",
     "weeklyLimitReached": "Limite semanal atingido",
     "monthlyUsage": "Uso mensal",

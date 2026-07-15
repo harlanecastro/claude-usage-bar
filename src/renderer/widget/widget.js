@@ -58,7 +58,9 @@ function render(view) {
 
   root.replaceChildren();
 
-  const blocks = [view.weekly, view.monthly].filter(Boolean);
+  // Session first, then weekly, then the optional monthly meter — the same order
+  // claude.ai's own usage page lists them in.
+  const blocks = [view.session, view.weekly, view.monthly].filter(Boolean);
 
   if (view.platform === 'darwin') {
     const parts = [];
