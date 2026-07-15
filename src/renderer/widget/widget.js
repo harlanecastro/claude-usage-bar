@@ -74,23 +74,15 @@ function render(view) {
     });
   }
 
-  // Report the painted size so the host can size the taskbar slot (Windows) or
-  // the captured tray image (macOS). Wait for layout, then for paint.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    const r = root.getBoundingClientRect();
-    window.usageBar.rendered({ width: Math.ceil(r.width), height: Math.ceil(r.height) });
-  }));
+  // Report the size synchronously. getBoundingClientRect forces layout, which is
+  // all we need — and requestAnimationFrame must not be used here: this window is
+  // never shown, and a hidden window produces no frames, so an rAF callback would
+  // simply never run and the widget would stay blank forever.
+  const r = root.getBoundingClientRect();
+  window.usageBar.rendered({ width: Math.ceil(r.width), height: Math.ceil(r.height) });
 }
 
-root.addEventListener('mouseenter', () => root.classList.add('hover'));
-root.addEventListener('mouseleave', () => root.classList.remove('hover'));
-
-root.addEventListener('mousedown', (event) => {
-  event.preventDefault();
-  if (event.button === 0) window.usageBar.click('left');
-  else if (event.button === 2) window.usageBar.click('right');
-});
-
-window.addEventListener('contextmenu', (e) => e.preventDefault());
-
+// No input handling here on purpose: this page is never shown. Clicks arrive at
+// the native taskbar window (Windows) or the tray item (macOS) and are handled in
+// the main process.
 window.usageBar.onState(render);

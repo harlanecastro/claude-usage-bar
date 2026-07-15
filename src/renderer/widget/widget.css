@@ -1,24 +1,29 @@
 /*
- * The widget draws straight onto the taskbar / menu bar acrylic, so it paints
- * no background of its own — only text and meters. Anything opaque here would
- * show up as a pasted rectangle.
+ * This page is never shown. It is captured to a bitmap that becomes the macOS
+ * menu bar image and the pixels of the Windows taskbar strip.
  */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
   height: 100%;
-  /* A hair of alpha rather than zero. The window is WS_EX_LAYERED, and layered
-     windows hit-test per pixel: fully transparent areas are click-through, so a
-     truly transparent background would send every click to the taskbar behind
-     us and only the glyphs themselves would be clickable. 1% alpha is
-     imperceptible over the acrylic but makes the whole strip a hit target. */
-  background: rgba(0, 0, 0, 0.01);
   overflow: hidden;
   cursor: default;
   user-select: none;
   -webkit-user-select: none;
 }
+
+/*
+ * macOS keeps its alpha: the tray image is composited over the menu bar and the
+ * blur shows through. Windows blits with StretchDIBits, which drops alpha, so the
+ * strip paints its own taskbar-coloured background — the same thing the reference
+ * does with FillRect(back_color), and a genuinely transparent window there turned
+ * out to be click-through anyway.
+ */
+html { background: transparent; }
+body.mac { background: transparent; }
+body.win { background: #202020; }
+body.win.light { background: #f3f3f3; }
 
 /* The window is as tall as its host bar; the content centres inside it. */
 body {

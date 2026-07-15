@@ -1,12 +1,15 @@
 /**
  * Hosts the one widget renderer on both platforms.
  *
- * Windows: the window is real and visible, reparented into Shell_TrayWnd, and
- * resized to whatever the renderer painted.
- * macOS: the same window is never shown. It renders offscreen, gets captured to
- * a bitmap, and that bitmap becomes the NSStatusItem image via Tray.
+ * Neither platform shows the BrowserWindow. It paints offscreen and the result
+ * is captured to a bitmap, which then becomes:
+ *   - macOS: the NSStatusItem image, via Tray.
+ *   - Windows: the pixels of a real Win32 window living inside the taskbar.
  *
- * One renderer, one set of strings, two very different delivery mechanisms.
+ * Windows needs that native window because an embedded Electron window never
+ * receives mouse input — see the long note at the top of win32-taskbar.js. The
+ * happy accident is that both platforms now want the same thing, a bitmap, so
+ * there is a single renderer and a single set of strings behind both surfaces.
  */
 const path = require('path');
 const { BrowserWindow, Tray, nativeImage, nativeTheme } = require('electron');
@@ -19,7 +22,7 @@ class Widget {
     this.onClick = onClick;
     this.win = null;
     this.tray = null;
-    this.host = null;         // TaskbarHost, Windows only
+    this.strip = null;        // TaskbarStrip, Windows only
     this.lastView = null;
     this.captureQueued = false;
   }
@@ -30,18 +33,14 @@ class Widget {
       height: IS_MAC ? MENU_BAR_HEIGHT : 48,
       show: false,
       frame: false,
-      transparent: true,
-      resizable: false,
-      movable: false,
-      minimizable: false,
-      maximizable: false,
+      // Opaque: the Windows strip blits these pixels with StretchDIBits, which
+      // ignores alpha, so the renderer paints its own taskbar-coloured
+      // background — the same thing TrafficMonitor does with FillRect.
+      transparent: IS_MAC,
+      resizable: true,
       skipTaskbar: true,
-      // Must stay false: a focusable widget becomes the foreground window and
-      // steals focus from whatever the user is typing in. popUpMenu() lends it
-      // focusability for the lifetime of the context menu instead.
       focusable: false,
       hasShadow: false,
-      useContentSize: true,
       webPreferences: {
         preload: path.join(__dirname, '..', 'preload', 'widget.js'),
         contextIsolation: true,
@@ -57,15 +56,10 @@ class Widget {
       this.tray.on('click', () => this.onClick('left'));
       this.tray.on('right-click', () => this.onClick('right'));
     } else {
-      // Attach only once there are pixels to show, so the taskbar never gets a
-      // blank rectangle wedged into it.
-      this.win.webContents.once('did-finish-load', () => {
-        const { TaskbarHost } = require('./win32-taskbar');
-        this.host = new TaskbarHost(this.win);
-        this.win.showInactive();
-        this.host.attach();
-        this.host.watch();
-      });
+      const { TaskbarStrip } = require('./win32-taskbar');
+      this.strip = new TaskbarStrip({ onClick: this.onClick });
+      this.strip.create();
+      this.strip.watch();
     }
 
     nativeTheme.on('updated', () => {
@@ -85,43 +79,41 @@ class Widget {
   /** Called when the renderer reports the size it just painted. */
   onRendered({ width, height }) {
     if (!this.win || this.win.isDestroyed()) return;
-
-    if (IS_MAC) {
-      this.win.setContentSize(Math.max(1, width), MENU_BAR_HEIGHT);
-      this.queueCapture(width);
-      return;
-    }
-
-    // Windows: never touch Electron's own sizing API here. setContentSize
-    // re-applies the bounds Electron cached before the reparent, which drags the
-    // window back out of the taskbar and up over the wallpaper. Once we are a
-    // child of Shell_TrayWnd, SetWindowPos is the only thing allowed to move us.
-    if (this.host) this.host.setDesiredWidth(width);
+    const w = Math.max(1, width);
+    const h = Math.max(1, IS_MAC ? MENU_BAR_HEIGHT : height);
+    this.win.setSize(w, h);
+    this.queueCapture(w, h);
   }
 
   /**
    * Capture is debounced: a language change or a countdown tick can fire several
    * renders back to back, and each capture is comparatively expensive.
    */
-  queueCapture(width) {
+  queueCapture(width, height) {
     if (this.captureQueued) return;
     this.captureQueued = true;
     setTimeout(async () => {
       this.captureQueued = false;
-      if (!this.win || this.win.isDestroyed() || !this.tray) return;
+      if (!this.win || this.win.isDestroyed()) return;
       try {
-        const image = await this.win.webContents.capturePage({
-          x: 0, y: 0, width: Math.max(1, width), height: MENU_BAR_HEIGHT,
-        });
-        if (!image.isEmpty()) this.tray.setImage(image);
+        const image = await this.win.webContents.capturePage({ x: 0, y: 0, width, height });
+        if (image.isEmpty()) return;
+
+        if (IS_MAC) {
+          this.tray.setImage(image);
+          return;
+        }
+
+        // Derive the real pixel size from the buffer rather than trusting the
+        // logical size: on a HiDPI display the capture comes back scaled.
+        const size = image.getSize();
+        const buffer = image.getBitmap();
+        const scale = Math.max(1, Math.round(Math.sqrt(buffer.length / 4 / (size.width * size.height))));
+        this.strip.setBitmap(buffer, size.width * scale, size.height * scale);
       } catch (err) {
-        console.error('[widget] menu bar capture failed:', err.message);
+        console.error('[widget] capture failed:', err.message);
       }
     }, 60);
-  }
-
-  setContextMenu(menu) {
-    this.contextMenu = menu;
   }
 
   popUpMenu(menu) {
@@ -129,23 +121,12 @@ class Widget {
       this.tray.popUpContextMenu(menu);
       return;
     }
-    if (!this.win) return;
-
-    // A WS_EX_NOACTIVATE window (focusable: false) cannot host a popup menu: the
-    // menu needs focus to stay open, so it dismisses itself the frame it
-    // appears — silently, with no error. Lend the window focusability for the
-    // lifetime of the menu, then take it back so ordinary clicks still don't
-    // steal focus from whatever the user was working in.
-    this.win.setFocusable(true);
-    this.win.focus();
-    menu.popup({
-      window: this.win,
-      callback: () => this.win.setFocusable(false),
-    });
+    // Anchored at the cursor, which is where the click came from.
+    menu.popup();
   }
 
   destroy() {
-    if (this.host) this.host.detach();
+    if (this.strip) this.strip.destroy();
     if (this.tray) this.tray.destroy();
     if (this.win && !this.win.isDestroyed()) this.win.destroy();
   }
