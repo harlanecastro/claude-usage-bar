@@ -78,6 +78,12 @@
     "signOut": "Sair da conta",
     "startAtLogin": "Iniciar junto com o sistema",
     "startAtLoginHint": "Abre o Claude Usage Bar automaticamente quando você entra no computador.",
-    "close": "Fechar"
+    "close": "Fechar",
+    "monitor": "Monitor",
+    "monitorHint": "Em qual monitor o widget aparece. Só monitores com barra de tarefas podem recebê-lo — ligue \"Mostrar minha barra de tarefas em todos os monitores\" no Windows para ver os outros.",
+    "primaryMonitor": "principal",
+    "alignLeft": "Colocar no canto esquerdo",
+    "alignLeftHint": "Fixa o widget na borda esquerda da barra em vez de ao lado do relógio. Útil quando seus ícones estão centralizados e aquele canto está sendo desperdiçado.",
+    "madeBy": "Feito por"
   }
 }

@@ -66,6 +66,21 @@
 
     <hr class="rule">
 
+    <!-- Only rendered when more than one monitor has a taskbar to live in. -->
+    <section class="field" id="monitorField" hidden>
+      <label class="field-label" for="monitor" data-i18n="settings.monitor"></label>
+      <p class="field-hint" data-i18n="settings.monitorHint"></p>
+      <select id="monitor"></select>
+    </section>
+
+    <section class="toggle-row">
+      <div class="txt">
+        <span class="field-label" data-i18n="settings.alignLeft"></span>
+        <p class="field-hint" data-i18n="settings.alignLeftHint"></p>
+      </div>
+      <button class="switch" id="alignLeft" role="switch" aria-checked="false"></button>
+    </section>
+
     <section class="toggle-row">
       <div class="txt">
         <span class="field-label" data-i18n="settings.startAtLogin"></span>
@@ -83,6 +98,11 @@
         <button class="btn" id="authBtn"></button>
       </div>
     </section>
+
+    <footer class="credit">
+      <span data-i18n="settings.madeBy"></span>
+      <b>Harlane Castro</b>
+    </footer>
 
   </main>
   <script src="settings.js"></script>

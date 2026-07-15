@@ -18,8 +18,9 @@ const IS_MAC = process.platform === 'darwin';
 const MENU_BAR_HEIGHT = 22;
 
 class Widget {
-  constructor({ onClick }) {
+  constructor({ onClick, resolveTarget }) {
     this.onClick = onClick;
+    this.resolveTarget = resolveTarget;
     this.win = null;
     this.tray = null;
     this.strip = null;        // TaskbarStrip, Windows only
@@ -41,6 +42,21 @@ class Widget {
     const hit = this.hits.find((h) => point.x >= h.x && point.x < h.x + h.width
       && point.y >= h.y && point.y < h.y + h.height);
     return hit ? hit.action : null;
+  }
+
+  /** Where the widget sits on screen, for anything that needs to point at it. */
+  anchorRect() {
+    if (IS_MAC && this.tray) {
+      const b = this.tray.getBounds();
+      return { x: b.x, y: b.y + b.height, width: b.width, height: b.height };
+    }
+    const rect = this.strip?.screenRect();
+    return rect ?? { x: 0, y: 0, width: 0, height: 0 };
+  }
+
+  /** Nudges the strip to re-resolve its taskbar and alignment right now. */
+  retarget() {
+    if (this.strip) this.strip.rebuild();
   }
 
   create() {
@@ -85,7 +101,7 @@ class Widget {
       this.tray.on('right-click', () => this.onClick('right'));
     } else {
       const { TaskbarStrip } = require('./win32-taskbar');
-      this.strip = new TaskbarStrip({ onClick: this.onClick });
+      this.strip = new TaskbarStrip({ onClick: this.onClick, resolve: this.resolveTarget });
       this.strip.create();
       this.strip.watch();
     }

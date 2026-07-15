@@ -8,6 +8,12 @@ const DEFAULTS = {
   // the two everyone has.
   visibleMeters: ['session', 'weekly_all'],
   startAtLogin: false,
+  // null = whichever monitor is primary. Only offered when more than one monitor
+  // actually has a taskbar.
+  monitorId: null,
+  // Parks the strip in the taskbar's left corner instead of beside the clock —
+  // dead space when the taskbar icons are centred.
+  alignLeft: false,
 };
 
 const store = new Store({ name: 'settings' });
@@ -21,6 +27,8 @@ function getSettings() {
     thresholds: normalizeThresholds(t.warn, t.crit),
     visibleMeters: normalizeMeters(store.get('visibleMeters', DEFAULTS.visibleMeters)),
     startAtLogin: store.get('startAtLogin', DEFAULTS.startAtLogin),
+    monitorId: store.get('monitorId', DEFAULTS.monitorId),
+    alignLeft: store.get('alignLeft', DEFAULTS.alignLeft),
   };
 }
 
@@ -48,6 +56,10 @@ function setSettings(patch) {
   }
   if (patch.visibleMeters !== undefined) store.set('visibleMeters', normalizeMeters(patch.visibleMeters));
   if (patch.startAtLogin !== undefined) store.set('startAtLogin', !!patch.startAtLogin);
+  if (patch.monitorId !== undefined) {
+    store.set('monitorId', Number.isFinite(patch.monitorId) ? patch.monitorId : null);
+  }
+  if (patch.alignLeft !== undefined) store.set('alignLeft', !!patch.alignLeft);
   return getSettings();
 }
 

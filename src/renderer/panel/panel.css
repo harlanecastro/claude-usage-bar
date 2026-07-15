@@ -1,0 +1,118 @@
+/*
+ * The panel that opens on a left click: the meters you chose NOT to keep in the
+ * bar. It is a real window, unlike the widget, so it can be styled freely — but
+ * it borrows the widget's palette so the two read as one app.
+ */
+
+:root {
+  --surface: #ffffff;
+  --ink: #12171d;
+  --muted: #5c6874;
+  --hairline: #d3dae1;
+  --track: rgba(0, 0, 0, 0.14);
+  --ok: #2f9e5b;
+  --warn: #d99400;
+  --crit: #d13c28;
+  --amber: #b07d00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1c2128;
+    --ink: #e4e9ee;
+    --muted: #909ca8;
+    --hairline: #2f3841;
+    --track: rgba(255, 255, 255, 0.16);
+    --ok: #45b972;
+    --warn: #efb02a;
+    --crit: #ef5b45;
+    --amber: #f2ba2e;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
+  font-size: 13px;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  /* The window is frameless and rounded; the border keeps it off a dark desktop. */
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.row { display: flex; flex-direction: column; gap: 5px; }
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.name { font-weight: 600; flex: 1; }
+
+.pct {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track);
+  overflow: hidden;
+}
+.meter i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.zone-ok i { background: var(--ok); }
+.zone-warn i { background: var(--warn); }
+.zone-crit i { background: var(--crit); }
+
+.pct.zone-ok { color: var(--ok); }
+.pct.zone-warn { color: var(--warn); }
+.pct.zone-crit { color: var(--crit); }
+
+/* Same crab mask as the bar, so the two surfaces agree. */
+.icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.tone-amber { color: var(--amber); }
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 12px;
+}

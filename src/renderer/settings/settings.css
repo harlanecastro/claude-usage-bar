@@ -33,6 +33,10 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* An explicit `display` beats the browser's own [hidden] rule, and every section
+   here sets one — so hidden sections would otherwise stay on screen. */
+[hidden] { display: none !important; }
+
 body {
   background: var(--surface);
   color: var(--ink);
@@ -288,6 +292,18 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .btn:hover { border-color: var(--accent); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- credit ---------- */
+
+.credit {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  padding-top: 4px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.credit b { font-weight: 600; color: var(--muted); }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

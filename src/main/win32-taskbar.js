@@ -98,6 +98,10 @@ const LoadCursorW = user32.func('__stdcall', 'LoadCursorW', HANDLE, [HANDLE, 'ui
 
 const FindWindowW = user32.func('__stdcall', 'FindWindowW', HWND, ['str16', 'str16']);
 const FindWindowExW = user32.func('__stdcall', 'FindWindowExW', HWND, [HWND, HWND, 'str16', 'str16']);
+
+const EnumProto = koffi.proto('__stdcall', 'EnumTaskbarsProc', 'bool', [HWND, 'intptr_t']);
+const EnumWindows = user32.func('__stdcall', 'EnumWindows', 'bool', [koffi.pointer(EnumProto), 'intptr_t']);
+const GetClassNameW = user32.func('__stdcall', 'GetClassNameW', 'int', [HWND, koffi.out(koffi.pointer('uint16_t')), 'int']);
 const IsWindow = user32.func('__stdcall', 'IsWindow', 'bool', [HWND]);
 const GetWindowRect = user32.func('__stdcall', 'GetWindowRect', 'bool', [HWND, koffi.out(koffi.pointer(RECT))]);
 const SetWindowPos = user32.func('__stdcall', 'SetWindowPos', 'bool', [HWND, HWND, 'int', 'int', 'int', 'int', 'uint']);
@@ -147,9 +151,54 @@ const WM_LBUTTONUP = 0x0202;
 const WM_RBUTTONUP = 0x0205;
 
 const TRAY_MARGIN = 12;
+const EDGE_MARGIN = 8;
 
 const rectOf = (h) => { const r = {}; return GetWindowRect(h, r) ? r : null; };
 const findTaskbar = () => { const h = FindWindowW('Shell_TrayWnd', null); return h && IsWindow(h) ? h : null; };
+
+const classOf = (h) => {
+  const buf = new Uint16Array(64);
+  const n = GetClassNameW(h, buf, 64);
+  return Buffer.from(buf.buffer, 0, n * 2).toString('utf16le');
+};
+
+/**
+ * Every taskbar on the machine, left to right.
+ *
+ * The primary display's bar is Shell_TrayWnd; each secondary display gets a
+ * Shell_SecondaryTrayWnd — but only while Windows is set to "show my taskbar on
+ * all displays". With that off there is simply no bar on the other monitors and
+ * nothing to inject into, which is why the monitor picker offers what this
+ * returns rather than the display list.
+ *
+ * @returns {Array<{hwnd, rect, primary}>}
+ */
+function listTaskbars() {
+  const found = [];
+
+  const primary = findTaskbar();
+  if (primary) {
+    const rect = rectOf(primary);
+    if (rect) found.push({ hwnd: primary, rect, primary: true });
+  }
+
+  // Held in a local so the GC cannot collect the callback while Windows calls it.
+  const collect = koffi.register((hwnd) => {
+    if (classOf(hwnd) === 'Shell_SecondaryTrayWnd') {
+      const rect = rectOf(hwnd);
+      if (rect) found.push({ hwnd, rect, primary: false });
+    }
+    return true;
+  }, koffi.pointer(EnumProto));
+
+  try {
+    EnumWindows(collect, 0);
+  } finally {
+    koffi.unregister(collect);
+  }
+
+  return found.sort((a, b) => a.rect.left - b.rect.left);
+}
 
 /**
  * Where inside the strip a mouse message landed. Windows packs the client
@@ -167,17 +216,21 @@ function clientPoint(lParam) {
 /**
  * Where the strip sits inside the taskbar.
  *
- * Right-aligned against the notification area, matching the reference
- * (`notify_x_pos - m_rect.Width() + 2`), so it stays put as apps open and close
- * instead of drifting with the icon band. Landmarks are read live: the icon band
- * grows, and Win11 centres it unless the user left-aligns the taskbar.
+ * By default it is right-aligned against the notification area, matching the
+ * reference (`notify_x_pos - m_rect.Width() + 2`), so it stays put as apps open
+ * and close instead of drifting with the icon band. Landmarks are read live: the
+ * icon band grows, and Win11 centres it unless the taskbar is left-aligned.
+ *
+ * `alignLeft` parks it in the left corner instead — which is dead space when the
+ * taskbar icons are centred, and the reason the option exists.
  */
-function measureSlot(hTaskbar, width, height) {
+function measureSlot(hTaskbar, width, height, { alignLeft = false } = {}) {
   const tb = rectOf(hTaskbar);
   if (!tb) return null;
 
   const barW = tb.right - tb.left;
   const barH = tb.bottom - tb.top;
+  const y = Math.max(0, Math.round((barH - height) / 2));
 
   const trayRect = rectOf(FindWindowExW(hTaskbar, 0, 'TrayNotifyWnd', null));
   const iconsRect = rectOf(FindWindowExW(hTaskbar, 0, 'ReBarWindow32', null));
@@ -185,19 +238,31 @@ function measureSlot(hTaskbar, width, height) {
   const trayLeft = trayRect ? trayRect.left - tb.left : barW;
   const iconsRight = iconsRect ? iconsRect.right - tb.left : 0;
 
-  return {
-    x: Math.max(iconsRight, trayLeft - TRAY_MARGIN - width),
-    y: Math.max(0, Math.round((barH - height) / 2)),
-    barH,
-  };
+  // Straight to the corner, as the reference does (`m_rect.MoveToX(2)`), with no
+  // attempt to dodge the icons. ReBarWindow32's rect cannot be trusted for that:
+  // it is a legacy stub, and the real Win11 icons are XAML that reaches well past
+  // its right edge, so "just after the icons" lands on top of them. The corner is
+  // only free on a centred taskbar — which is exactly who this option is for.
+  if (alignLeft) return { x: EDGE_MARGIN, y, barH };
+
+  // Right-aligned against the notification area, which unlike the icon band is a
+  // real window whose rect can be believed.
+  return { x: Math.max(iconsRight, trayLeft - TRAY_MARGIN - width), y, barH };
 }
 
 let classRegistered = false;
 let classProcCallback = null; // must outlive the class registration
 
 class TaskbarStrip {
-  constructor({ onClick } = {}) {
+  /**
+   * @param {function(): {hwnd: bigint|number|null, alignLeft: boolean}} resolve
+   *   Asked fresh each time rather than passed once: the user can move the strip
+   *   to another monitor or flip its alignment while it is running, and the
+   *   chosen taskbar's hwnd changes whenever explorer restarts.
+   */
+  constructor({ onClick, resolve } = {}) {
     this.onClick = onClick;
+    this.resolve = resolve || (() => ({ hwnd: findTaskbar(), alignLeft: false }));
     this.hwnd = null;
     this.hTaskbar = null;
     this.bitmap = null;   // BGRA, top-down
@@ -258,8 +323,8 @@ class TaskbarStrip {
   }
 
   create() {
-    const hTaskbar = findTaskbar();
-    if (!hTaskbar) return false;
+    const hTaskbar = this.resolve().hwnd;
+    if (!hTaskbar || !IsWindow(hTaskbar)) return false;
 
     TaskbarStrip.ensureClass();
     TaskbarStrip.current = this;
@@ -380,15 +445,33 @@ class TaskbarStrip {
 
   position() {
     if (!this.hwnd || !this.hTaskbar || !this.width) return;
-    const slot = measureSlot(this.hTaskbar, this.width, this.height);
+    const slot = measureSlot(this.hTaskbar, this.width, this.height, this.resolve());
     if (!slot) return;
     SetWindowPos(this.hwnd, HWND_TOP, slot.x, slot.y, this.width, this.height,
       SWP_SHOWWINDOW | SWP_NOACTIVATE);
   }
 
+  /** Tear the window down and rebuild it against whatever taskbar is chosen now. */
+  rebuild() {
+    if (this.hwnd && IsWindow(this.hwnd)) {
+      try { DestroyWindow(this.hwnd); } catch { /* already gone */ }
+    }
+    this.hwnd = null;
+    if (this.create()) {
+      this.position();
+      this.compose();
+    }
+  }
+
   taskbarHeight() {
     const tb = this.hTaskbar ? rectOf(this.hTaskbar) : null;
     return tb ? tb.bottom - tb.top : 48;
+  }
+
+  /** The strip's position on screen, for anything that needs to point at it. */
+  screenRect() {
+    const r = this.hwnd && IsWindow(this.hwnd) ? rectOf(this.hwnd) : null;
+    return r ? { x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top } : null;
   }
 
   cursorPos() {
@@ -405,15 +488,15 @@ class TaskbarStrip {
   watch(intervalMs = 1500) {
     this.stopWatching();
     this.timer = setInterval(() => {
-      const current = findTaskbar();
-      if (!current) return;
+      const wanted = this.resolve().hwnd;
+      if (!wanted || !IsWindow(wanted)) return; // monitor unplugged, or its bar is gone
 
-      if (!this.hwnd || !IsWindow(this.hwnd) || current.toString() !== this.hTaskbar.toString()) {
-        this.hwnd = null;
-        if (this.create()) {
-          this.position();
-          this.compose();
-        }
+      // Rebuild when the window died, or when the bar we should be living in is
+      // no longer the one we are in — explorer restarting mints a new hwnd, and
+      // so does the user moving the strip to another monitor.
+      if (!this.hwnd || !IsWindow(this.hwnd)
+        || !this.hTaskbar || wanted.toString() !== this.hTaskbar.toString()) {
+        this.rebuild();
         return;
       }
       this.position();
@@ -437,4 +520,4 @@ class TaskbarStrip {
 
 TaskbarStrip.current = null;
 
-module.exports = { TaskbarStrip, findTaskbar, measureSlot };
+module.exports = { TaskbarStrip, findTaskbar, listTaskbars, measureSlot };

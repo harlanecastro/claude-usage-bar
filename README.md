@@ -10,9 +10,12 @@ you when it resets.
   is doing right now. Any subset; at least one.
 - **i18n** — English, Português (Brasil), Español; follows the OS by default.
 - **Colour thresholds** — you decide where the meter turns yellow and red.
+- **Multi-monitor** — pick which taskbar it lives in, when more than one has one.
+- **Left corner** — park it in the dead space a centred taskbar leaves behind.
 
-Left click opens `claude.ai/new#settings/usage`. Right click opens the menu, which
-can toggle meters too.
+Left click opens a panel with the meters you chose to hide — nothing opens if you
+hide nothing. Right click opens the menu, which can toggle meters and reach the
+usage page.
 
 ## Claude Code status
 
@@ -149,6 +152,7 @@ src/
   main/
     index.js          lifecycle, polling, view model, menu
     claude-status.js  reads ~/.claude/statusbar/state.d, picks the lead session
+    monitors.js       which monitors have a taskbar to host the widget
     win32-taskbar.js  SetParent injection + slot measurement (koffi/Win32)
     widget.js         hosts the one renderer: real window on Win, Tray image on Mac
     auth.js           login window, sessionKey, keychain
@@ -158,7 +162,8 @@ src/
     config.js         electron-store settings
   renderer/
     widget/           the strip. A dumb painter — every string arrives translated
-    settings/         language, thresholds, monthly toggle, account
+    panel/            the hidden meters, on left click
+    settings/         language, thresholds, meters, monitor, account
   shared/locales/     en, pt-BR, es
 spike/                throwaway probes kept as documentation
 ```

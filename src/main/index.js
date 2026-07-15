@@ -1,11 +1,12 @@
 const path = require('path');
-const { app, BrowserWindow, ipcMain, Menu, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, nativeTheme, screen } = require('electron');
 
 const { getSettings, setSettings } = require('./config');
 const { Translator, resolveLanguage, availableLanguages } = require('./i18n');
 const auth = require('./auth');
 const { fetchUsage, isAuthError } = require('./usage');
 const { activeSessions } = require('./claude-status');
+const { hostMonitors, resolveTaskbar } = require('./monitors');
 const { CRAB_FRAMES, CRAB_FPS } = require('../shared/status-frames');
 const { Widget, IS_MAC } = require('./widget');
 
@@ -26,8 +27,11 @@ const ANIM_INTERVAL = Math.round(1000 / CRAB_FPS);
 
 if (process.platform === 'win32') app.setAppUserModelId('com.harlanecastro.claudeusagebar');
 
+const GAP = 8; // breathing room between the panel, the taskbar and the screen edge
+
 let widget = null;
 let settingsWindow = null;
+let panelWindow = null;
 let pollTimer = null;
 let tickTimer = null;
 let statusTimer = null;
@@ -80,6 +84,13 @@ function selectedMeters() {
   // no longer has (plan change, model retired).
   if (picked.length) return picked;
   return chosen.includes(STATUS_KEY) ? [] : available.slice(0, 1);
+}
+
+/** The meters deliberately kept out of the bar — what the panel is for. */
+function hiddenMeters() {
+  const chosen = getSettings().visibleMeters;
+  const shown = new Set(selectedMeters().map((m) => m.key));
+  return (model.data ?? []).filter((m) => !shown.has(m.key) && !chosen.includes(m.key));
 }
 
 /** "1m 3s" / "43s" — Claude Code's own elapsed-clock style. */
@@ -196,8 +207,95 @@ function buildView() {
   return { ...base, blocks };
 }
 
+/**
+ * What the panel shows: only the meters kept out of the bar.
+ *
+ * Deliberately not "everything" — the panel exists to reach what you chose to
+ * hide, so with nothing hidden there is nothing to open.
+ */
+function buildPanelView() {
+  const settings = getSettings();
+  const t = translator();
+
+  const blocks = hiddenMeters().map((meter) => ({
+    label: meterLabel(t, meter, meter.utilization >= 100),
+    pct: Math.min(100, meter.utilization),
+    zone: zoneOf(meter.utilization, settings.thresholds),
+    sub: t.t('widget.resetsIn', { duration: t.duration(meter.resetsAt - Date.now()) }),
+  }));
+
+  if (!settings.visibleMeters.includes(STATUS_KEY)) {
+    const status = statusBlock(t);
+    if (status) blocks.unshift(status);
+  }
+
+  return { blocks };
+}
+
 function paint() {
   if (widget) widget.setView(buildView());
+  // The panel shows live values too, so it follows every repaint while open.
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send('panel:state', buildPanelView());
+  }
+}
+
+/**
+ * Opens the panel under the widget. Does nothing when nothing is hidden: an
+ * empty panel would be a worse answer than no panel.
+ */
+function togglePanel() {
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.close();
+    return;
+  }
+  if (!buildPanelView().blocks.length) return;
+
+  panelWindow = new BrowserWindow({
+    width: 280,
+    height: 120,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'preload', 'panel.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  panelWindow.loadFile(path.join(__dirname, '..', 'renderer', 'panel', 'panel.html'));
+  panelWindow.once('ready-to-show', () => {
+    panelWindow.webContents.send('panel:state', buildPanelView());
+  });
+  // Click away and it goes, like any popover.
+  panelWindow.on('blur', () => panelWindow && !panelWindow.isDestroyed() && panelWindow.close());
+  panelWindow.on('closed', () => { panelWindow = null; });
+}
+
+/** Sizes the panel to its content and parks it just clear of the widget. */
+function placePanel({ width, height }) {
+  if (!panelWindow || panelWindow.isDestroyed()) return;
+
+  const w = Math.max(220, width);
+  const h = Math.max(60, height);
+  panelWindow.setContentSize(w, h);
+
+  const anchor = widget.anchorRect();
+  const display = screen.getDisplayNearestPoint({ x: anchor.x, y: anchor.y });
+  const area = display.workArea;
+
+  // Above the taskbar and left-aligned with the widget, then pulled back inside
+  // the work area so it can never hang off the edge of the screen.
+  const x = Math.min(Math.max(anchor.x, area.x + GAP), area.x + area.width - w - GAP);
+  const y = Math.max(area.y + GAP, anchor.y - h - GAP);
+
+  panelWindow.setPosition(Math.round(x), Math.round(y));
+  panelWindow.showInactive();
+  panelWindow.focus(); // focused so that clicking away blurs it shut
 }
 
 async function refresh() {
@@ -261,12 +359,12 @@ async function handleClick(button, point) {
   if (button === 'right') return widget.popUpMenu(buildMenu());
 
   // The session-count badge is a control in its own right; a click that lands on
-  // it moves to the next session instead of leaving for the browser.
+  // it moves to the next session instead of opening the panel.
   if (widget.hitAt(point) === 'cycle') return cycleSession();
 
   if (model.state === 'signedOut') return startSignIn();
   if (model.state === 'error') return refresh();
-  shell.openExternal(USAGE_PAGE);
+  togglePanel();
 }
 
 async function startSignIn() {
@@ -392,6 +490,7 @@ function openSettings() {
 
 ipcMain.on('widget:rendered', (_e, size) => widget && widget.onRendered(size));
 ipcMain.on('widget:click', (_e, button) => handleClick(button));
+ipcMain.on('panel:rendered', (_e, size) => placePanel(size));
 
 /**
  * What the settings window and the context menu offer to toggle: whatever this
@@ -408,10 +507,17 @@ function availableMeters() {
   ];
 }
 
+/** Only worth offering when there is a choice — see monitors.js. */
+function monitorChoices() {
+  const monitors = hostMonitors();
+  return monitors.length > 1 ? monitors.map(({ id, label, primary }) => ({ id, label, primary })) : [];
+}
+
 ipcMain.handle('settings:get', () => ({
   settings: getSettings(),
   languages: availableLanguages(),
   meters: availableMeters(),
+  monitors: monitorChoices(),
   strings: translator().dict,
   signedIn: auth.isSignedIn(),
   resolvedLanguage: resolveLanguage(getSettings().language),
@@ -419,11 +525,15 @@ ipcMain.handle('settings:get', () => ({
 
 ipcMain.handle('settings:set', async (_e, patch) => {
   const after = setSettings(patch);
+  // Moving monitors or flipping alignment means the strip has to be rebuilt
+  // against a different taskbar; a repaint alone would leave it where it was.
+  if (patch.monitorId !== undefined || patch.alignLeft !== undefined) widget.retarget();
   paint();
   armStatusTimer();
   return {
     settings: after,
     meters: availableMeters(),
+    monitors: monitorChoices(),
     strings: translator().dict,
     resolvedLanguage: resolveLanguage(after.language),
   };
@@ -452,7 +562,15 @@ if (!app.requestSingleInstanceLock()) {
     auth.applyUserAgent();
     if (IS_MAC && app.dock) app.dock.hide();
 
-    widget = new Widget({ onClick: handleClick });
+    widget = new Widget({
+      onClick: handleClick,
+      // Read fresh on every call: the monitor and alignment can change under the
+      // strip while it runs, and so can the taskbar's hwnd.
+      resolveTarget: () => {
+        const { monitorId, alignLeft } = getSettings();
+        return { hwnd: resolveTaskbar(monitorId), alignLeft };
+      },
+    });
     widget.create();
     paint();
 

@@ -78,6 +78,12 @@
     "signOut": "Sign out",
     "startAtLogin": "Start at login",
     "startAtLoginHint": "Opens Claude Usage Bar automatically when you sign in to your computer.",
-    "close": "Close"
+    "close": "Close",
+    "monitor": "Monitor",
+    "monitorHint": "Which monitor shows the widget. Only monitors with a taskbar can host it — turn on Windows' \"Show my taskbar on all displays\" to get the others.",
+    "primaryMonitor": "primary",
+    "alignLeft": "Put it in the left corner",
+    "alignLeftHint": "Parks the widget at the left edge of the taskbar instead of next to the clock. Useful when your taskbar icons are centred and that corner is going to waste.",
+    "madeBy": "Made by"
   }
 }

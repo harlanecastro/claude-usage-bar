@@ -4,6 +4,7 @@ const state = {
   settings: null,
   strings: null,
   meters: [],
+  monitors: [],
 };
 
 const lookup = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), state.strings);
@@ -16,6 +17,7 @@ function applyStrings() {
   document.title = lookup('settings.windowTitle') || 'Settings';
   renderZones();
   renderMeters();
+  renderMonitors();
   renderAuth();
 }
 
@@ -110,6 +112,41 @@ function bindSwitch(id, key) {
 }
 
 bindSwitch('startAtLogin', 'startAtLogin');
+bindSwitch('alignLeft', 'alignLeft');
+
+// ---------- monitors ----------
+
+/**
+ * Hidden entirely unless there is a choice: only monitors that actually have a
+ * taskbar can host the widget, so a single-monitor setup has nothing to pick.
+ */
+function renderMonitors() {
+  const field = $('monitorField');
+  const select = $('monitor');
+
+  if (!state.monitors.length) {
+    field.hidden = true;
+    return;
+  }
+  field.hidden = false;
+  select.replaceChildren();
+
+  for (const monitor of state.monitors) {
+    const option = document.createElement('option');
+    option.value = String(monitor.id);
+    option.textContent = monitor.primary
+      ? `${monitor.label} — ${lookup('settings.primaryMonitor') || 'primary'}`
+      : monitor.label;
+    select.appendChild(option);
+  }
+
+  const current = state.settings.monitorId
+    ?? state.monitors.find((m) => m.primary)?.id
+    ?? state.monitors[0].id;
+  select.value = String(current);
+}
+
+$('monitor').addEventListener('change', (event) => push({ monitorId: Number(event.target.value) }));
 
 // ---------- meters ----------
 
@@ -182,14 +219,17 @@ async function push(patch) {
   state.settings = result.settings;
   state.strings = result.strings;
   state.meters = result.meters ?? state.meters;
+  state.monitors = result.monitors ?? state.monitors;
   applyStrings();
   syncControls();
 }
 
 function syncControls() {
   $('startAtLogin').setAttribute('aria-checked', String(state.settings.startAtLogin));
+  $('alignLeft').setAttribute('aria-checked', String(state.settings.alignLeft));
   $('lang').value = state.settings.language;
   renderMeters();
+  renderMonitors();
 }
 
 // ---------- boot ----------
@@ -199,6 +239,7 @@ async function reload() {
   state.settings = data.settings;
   state.strings = data.strings;
   state.meters = data.meters ?? [];
+  state.monitors = data.monitors ?? [];
   state.signedIn = data.signedIn;
   applyStrings();
   syncControls();
@@ -209,6 +250,7 @@ async function reload() {
   state.settings = data.settings;
   state.strings = data.strings;
   state.meters = data.meters ?? [];
+  state.monitors = data.monitors ?? [];
   state.signedIn = data.signedIn;
 
   const select = $('lang');
