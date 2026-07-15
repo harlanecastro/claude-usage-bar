@@ -25,6 +25,22 @@ class Widget {
     this.strip = null;        // TaskbarStrip, Windows only
     this.lastView = null;
     this.captureQueued = false;
+    // Clickable regions the renderer laid out, in widget-local pixels.
+    this.hits = [];
+  }
+
+  /**
+   * What was clicked, given a point inside the widget.
+   *
+   * The page itself can never receive a click — it is only ever captured to a
+   * bitmap — so the renderer reports where it put things and the hit test
+   * happens here against the coordinates the native surface gives us.
+   */
+  hitAt(point) {
+    if (!point) return null;
+    const hit = this.hits.find((h) => point.x >= h.x && point.x < h.x + h.width
+      && point.y >= h.y && point.y < h.y + h.height);
+    return hit ? hit.action : null;
   }
 
   create() {
@@ -50,8 +66,9 @@ class Widget {
     this.win.loadFile(path.join(__dirname, '..', 'renderer', 'widget', 'widget.html'));
 
     // The widget renderer is never shown, so its console is otherwise unreachable
-    // and its errors are silent. --debug surfaces them.
-    if (process.argv.includes('--debug')) {
+    // and its errors are silent. --verbose surfaces them. (Not --debug: that is a
+    // retired Node flag and Electron refuses to start when it sees it.)
+    if (process.argv.includes('--verbose')) {
       this.win.webContents.on('console-message', (_e, _level, message) => {
         console.log('[widget renderer]', message);
       });
@@ -59,7 +76,12 @@ class Widget {
 
     if (IS_MAC) {
       this.tray = new Tray(nativeImage.createEmpty());
-      this.tray.on('click', () => this.onClick('left'));
+      // bounds is the status item's frame and position is where the click landed,
+      // both in screen coordinates — the difference is the widget-local point.
+      this.tray.on('click', (_e, bounds, position) => this.onClick('left', {
+        x: Math.round((position?.x ?? 0) - (bounds?.x ?? 0)),
+        y: Math.round((position?.y ?? 0) - (bounds?.y ?? 0)),
+      }));
       this.tray.on('right-click', () => this.onClick('right'));
     } else {
       const { TaskbarStrip } = require('./win32-taskbar');
@@ -83,7 +105,11 @@ class Widget {
   }
 
   /** Called when the renderer reports the size it just painted. */
-  onRendered({ width, height }) {
+  onRendered({ width, height, hits }) {
+    this.hits = hits ?? [];
+    if (process.argv.includes('--verbose') && this.hits.length) {
+      console.log('[widget] hit regions:', JSON.stringify(this.hits));
+    }
     if (!this.win || this.win.isDestroyed()) return;
     const w = Math.max(1, width);
     const h = Math.max(1, IS_MAC ? MENU_BAR_HEIGHT : height);

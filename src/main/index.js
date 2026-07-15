@@ -5,7 +5,7 @@ const { getSettings, setSettings } = require('./config');
 const { Translator, resolveLanguage, availableLanguages } = require('./i18n');
 const auth = require('./auth');
 const { fetchUsage, isAuthError } = require('./usage');
-const { currentStatus } = require('./claude-status');
+const { activeSessions } = require('./claude-status');
 const { CRAB_FRAMES, CRAB_FPS } = require('../shared/status-frames');
 const { Widget, IS_MAC } = require('./widget');
 
@@ -32,6 +32,12 @@ let pollTimer = null;
 let tickTimer = null;
 let statusTimer = null;
 let animFrame = 0;
+
+// The session the user cycled to, by id. Null means "whichever matters most",
+// which is the resting behaviour. Held by id rather than by index because the
+// running order re-sorts as states change, and an index would drift onto a
+// different session under the user's eyes.
+let pinnedSession = null;
 
 const model = {
   state: 'loading',   // loading | ok | signedOut | error
@@ -84,44 +90,79 @@ function elapsed(seconds) {
 }
 
 /**
+ * Which session the status block is showing, and how many there are.
+ *
+ * A pin only survives while its session is still active — once it finishes, the
+ * widget falls back to whatever matters most, so it never strands you watching a
+ * dead session while another one waits for an answer.
+ */
+function shownSession() {
+  const sessions = activeSessions();
+  if (!sessions.length) {
+    pinnedSession = null;
+    return { session: null, sessions };
+  }
+
+  const pinned = pinnedSession && sessions.find((s) => s.id === pinnedSession);
+  if (!pinned) pinnedSession = null;
+
+  return { session: pinned || sessions[0], sessions };
+}
+
+/** Move the status block to the next session, wrapping around. */
+function cycleSession() {
+  const { session, sessions } = shownSession();
+  if (sessions.length < 2 || !session) return;
+
+  const at = sessions.findIndex((s) => s.id === session.id);
+  pinnedSession = sessions[(at + 1) % sessions.length].id;
+  paint();
+}
+
+/**
  * The status block: what Claude Code is doing right now.
  *
  * Returns null when nothing is worth saying, so an idle Claude takes no room in
  * the bar rather than parking on a permanent "idle".
  */
 function statusBlock(t) {
-  const status = currentStatus();
-  if (!status) return null;
+  const { session, sessions } = shownSession();
+  if (!session) return null;
 
-  if (status.state === 'permission') {
+  // Only worth showing when there is something to cycle through.
+  const count = sessions.length > 1 ? sessions.length : 0;
+
+  if (session.state === 'permission') {
     return {
       kind: 'status',
       label: t.t('status.permission'),
-      sub: status.project,
+      sub: session.project,
       // Amber and still. A spinner would say "busy"; this is the opposite —
       // nothing moves until you act, and that is the whole point of the state.
       tone: 'amber',
       animate: false,
       elapsed: null,
+      count,
     };
   }
 
-  const label = status.state === 'tool'
-    ? (t.t(`status.tools.${status.tool}`) === `status.tools.${status.tool}`
+  const label = session.state === 'tool'
+    ? (t.t(`status.tools.${session.tool}`) === `status.tools.${session.tool}`
       ? t.t('status.tools.default')
-      : t.t(`status.tools.${status.tool}`))
+      : t.t(`status.tools.${session.tool}`))
     : t.t('status.thinking');
 
   return {
     kind: 'status',
     label,
-    sub: status.project,
+    sub: session.project,
     tone: null,
     animate: true,
     frame: animFrame,
-    elapsed: status.startedAt > 0
-      ? elapsed(Math.max(0, Math.floor(Date.now() / 1000) - status.startedAt))
+    elapsed: session.startedAt > 0
+      ? elapsed(Math.max(0, Math.floor(Date.now() / 1000) - session.startedAt))
       : null,
+    count,
   };
 }
 
@@ -204,8 +245,8 @@ function armStatusTimer() {
 
   if (!getSettings().visibleMeters.includes(STATUS_KEY)) return;
 
-  const status = currentStatus();
-  const animating = !!status && status.state !== 'permission';
+  const { session } = shownSession();
+  const animating = !!session && session.state !== 'permission';
 
   statusTimer = setTimeout(() => {
     if (animating) animFrame = (animFrame + 1) % CRAB_FRAMES.length;
@@ -216,8 +257,12 @@ function armStatusTimer() {
 
 // ---------- interactions ----------
 
-async function handleClick(button) {
+async function handleClick(button, point) {
   if (button === 'right') return widget.popUpMenu(buildMenu());
+
+  // The session-count badge is a control in its own right; a click that lands on
+  // it moves to the next session instead of leaving for the browser.
+  if (widget.hitAt(point) === 'cycle') return cycleSession();
 
   if (model.state === 'signedOut') return startSignIn();
   if (model.state === 'error') return refresh();

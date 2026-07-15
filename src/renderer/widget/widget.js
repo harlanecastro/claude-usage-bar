@@ -44,12 +44,26 @@ const icon = (block) => {
   return node;
 };
 
+/**
+ * How many Claude Code sessions are running. Only drawn when there is more than
+ * one, because otherwise the number says nothing you cannot already see.
+ *
+ * Tagged as a hit target: the main process reads its rect back and routes a
+ * click inside it to cycling instead of to the usage page.
+ */
+const badge = (count) => {
+  const node = el('span', 'badge', String(count));
+  node.dataset.hit = 'cycle';
+  return node;
+};
+
 function winBlock(block) {
   const group = el('div', 'group');
   const line1 = el('div', 'line1');
 
   if (block.kind === 'status') line1.appendChild(icon(block));
   line1.appendChild(el('span', `label${block.tone ? ` tone-${block.tone}` : ''}`, block.label));
+  if (block.count) line1.appendChild(badge(block.count));
   if (block.elapsed) line1.appendChild(el('span', 'clock', block.elapsed));
   if (block.pct != null) {
     line1.appendChild(meter(block.pct, block.zone));
@@ -64,6 +78,7 @@ function winBlock(block) {
 function macBlock(block, parts) {
   if (block.kind === 'status') parts.push(icon(block));
   parts.push(el('span', block.tone ? `tone-${block.tone}` : null, block.label));
+  if (block.count) parts.push(badge(block.count));
   if (block.elapsed) parts.push(el('span', 'clock', block.elapsed));
   if (block.pct != null) {
     parts.push(el('span', `pct zone-${block.zone}`, `${Math.round(block.pct)}%`));
@@ -105,7 +120,22 @@ function render(view) {
   // never shown, and a hidden window produces no frames, so an rAF callback would
   // simply never run and the widget would stay blank forever.
   const r = root.getBoundingClientRect();
-  window.usageBar.rendered({ width: Math.ceil(r.width), height: Math.ceil(r.height) });
+
+  // Hand back where the clickable bits landed. Nothing in this page can receive a
+  // click — it is only ever captured to a bitmap — so the main process hit-tests
+  // these rects against the coordinates the native window reports.
+  const hits = [...root.querySelectorAll('[data-hit]')].map((node) => {
+    const box = node.getBoundingClientRect();
+    return {
+      action: node.dataset.hit,
+      x: Math.floor(box.left - r.left),
+      y: Math.floor(box.top - r.top),
+      width: Math.ceil(box.width),
+      height: Math.ceil(box.height),
+    };
+  });
+
+  window.usageBar.rendered({ width: Math.ceil(r.width), height: Math.ceil(r.height), hits });
 }
 
 // No input handling here on purpose: this page is never shown. Clicks arrive at

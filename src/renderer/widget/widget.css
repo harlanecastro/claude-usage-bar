@@ -147,6 +147,24 @@ body.light .tone-amber { color: #b07d00; }
   opacity: 0.65;
 }
 
+/* Session count. Reads as a control rather than a label, because it is one:
+   clicking it moves the block to the next session. */
+.badge {
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+}
+body.light .badge { background: rgba(0, 0, 0, 0.16); }
+
 .zone-ok i { background: #45b972; }
 .zone-warn i { background: #efb02a; }
 .zone-crit i { background: #ef5b45; }

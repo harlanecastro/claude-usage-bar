@@ -152,6 +152,19 @@ const rectOf = (h) => { const r = {}; return GetWindowRect(h, r) ? r : null; };
 const findTaskbar = () => { const h = FindWindowW('Shell_TrayWnd', null); return h && IsWindow(h) ? h : null; };
 
 /**
+ * Where inside the strip a mouse message landed. Windows packs the client
+ * coordinates into lParam as two signed 16-bit halves; they are signed because a
+ * captured mouse can report points outside the window.
+ */
+function clientPoint(lParam) {
+  const lp = BigInt(lParam);
+  return {
+    x: Number(BigInt.asIntN(16, lp & 0xFFFFn)),
+    y: Number(BigInt.asIntN(16, (lp >> 16n) & 0xFFFFn)),
+  };
+}
+
+/**
  * Where the strip sits inside the taskbar.
  *
  * Right-aligned against the notification area, matching the reference
@@ -208,7 +221,10 @@ class TaskbarStrip {
         case WM_ERASEBKGND:
           return 1n;
         case WM_LBUTTONUP:
-          if (self) setImmediate(() => self.onClick && self.onClick('left'));
+          if (self) {
+            const at = clientPoint(lParam);
+            setImmediate(() => self.onClick && self.onClick('left', at));
+          }
           return 0n;
         case WM_RBUTTONUP:
           if (self) setImmediate(() => self.onClick && self.onClick('right'));

@@ -87,14 +87,15 @@ function effectiveState(s, nowSec) {
 }
 
 /**
- * The one session worth showing.
+ * Every session worth showing, most important first.
  *
  * Highest priority wins, ties broken by recency — so a session waiting on YOU is
- * never buried behind one that is merely thinking.
+ * never buried behind one that is merely thinking. The order is stable for a
+ * given set of states, which is what makes cycling through them predictable.
  *
- * @returns {{state,label,tool,project,startedAt}|null} null when nothing is active.
+ * @returns {Array<{id,state,label,tool,project,startedAt}>} empty when nothing is active.
  */
-function currentStatus() {
+function activeSessions() {
   const nowSec = Math.floor(Date.now() / 1000);
 
   const live = readSessions()
@@ -102,23 +103,26 @@ function currentStatus() {
     .map((s) => ({ ...s, eff: effectiveState(s, nowSec) }))
     .filter((s) => PRIORITY[s.eff]);
 
-  if (!live.length) return null;
-
   live.sort((a, b) => {
     const pa = PRIORITY[a.eff] ?? 0;
     const pb = PRIORITY[b.eff] ?? 0;
     return pa === pb ? (b.ts || 0) - (a.ts || 0) : pb - pa;
   });
 
-  const lead = live[0];
-  return {
-    state: lead.eff,
-    label: lead.label || '',
-    tool: lead.tool || '',
-    project: lead.project || '',
+  return live.map((s) => ({
+    id: s.sessionId || '',
+    state: s.eff,
+    label: s.label || '',
+    tool: s.tool || '',
+    project: s.project || '',
     // Cleared for permission: there is no turn running to time.
-    startedAt: lead.eff === 'permission' ? 0 : (lead.startedAt || 0),
-  };
+    startedAt: s.eff === 'permission' ? 0 : (s.startedAt || 0),
+  }));
+}
+
+/** The one session that matters most, or null when nothing is active. */
+function currentStatus() {
+  return activeSessions()[0] ?? null;
 }
 
 /** Are the hooks installed and writing? Drives the "set this up" hint. */
@@ -130,4 +134,4 @@ function hooksInstalled() {
   }
 }
 
-module.exports = { currentStatus, hooksInstalled, STATE_DIR };
+module.exports = { activeSessions, currentStatus, hooksInstalled, STATE_DIR };
