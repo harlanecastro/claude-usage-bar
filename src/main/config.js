@@ -3,10 +3,10 @@ const Store = require('electron-store');
 const DEFAULTS = {
   language: 'auto',        // 'auto' follows the OS, otherwise an explicit locale key
   thresholds: { warn: 60, crit: 85 },
-  // Which meters the strip shows, by the keys usage.js derives from the API.
-  // Whatever the account actually has decides what is offered; these are just
-  // the two everyone has.
-  visibleMeters: ['session', 'weekly_all'],
+  // Which meters the strip shows, by the keys usage.js derives from the API
+  // (plus claude_status, which is local). Whatever the account actually has
+  // decides what is offered; these two are what a fresh install opens with.
+  visibleMeters: ['claude_status', 'session'],
   startAtLogin: false,
   // null = whichever monitor is primary. Only offered when more than one monitor
   // actually has a taskbar.

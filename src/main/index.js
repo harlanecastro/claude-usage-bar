@@ -569,7 +569,14 @@ ipcMain.handle('settings:signOut', async () => {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', openSettings);
+  // Launching again while already running must NOT open settings. The installer's
+  // finish screen launches the app, so a first-time user landed in a settings
+  // window instead of the widget asking them to sign in. There is nothing to open
+  // anyway — the widget is the app, and it is already in the taskbar — so just
+  // make sure it really is there.
+  app.on('second-instance', () => {
+    if (widget) widget.retarget();
+  });
 
   app.whenReady().then(async () => {
     auth.applyUserAgent();
