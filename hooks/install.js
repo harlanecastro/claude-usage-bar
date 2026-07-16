@@ -63,8 +63,17 @@ fs.mkdirSync(sbDir, { recursive: true });
 fs.copyFileSync(path.join(__dirname, 'update.js'), updateDest);
 fs.copyFileSync(path.join(__dirname, 'lifecycle.js'), lifecycleDest);
 
-const quoted = (p) => (p.includes(' ') ? `"${p}"` : p);
-const cmd = (script, arg) => `${quoted(node)} ${quoted(script)} ${arg}`;
+/**
+ * Hook commands run through a shell, and that shell eats backslashes as escapes.
+ * A native Windows path from path.join() therefore destroys itself on the way to
+ * node — `C:\Users\harla\.claude\...` arrives as `Usersharla.claude...` and the
+ * hook dies with MODULE_NOT_FOUND, silently, every single time.
+ *
+ * Forward slashes survive both cmd and sh, and Windows accepts them everywhere.
+ * Quote unconditionally: "Program Files" has a space in it.
+ */
+const shellPath = (p) => `"${p.replace(/\\/g, '/')}"`;
+const cmd = (script, arg) => `${shellPath(node)} ${shellPath(script)} ${arg}`;
 
 const add = (event, command, matched) => {
   settings.hooks[event] = settings.hooks[event] || [];

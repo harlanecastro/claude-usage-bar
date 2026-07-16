@@ -44,9 +44,8 @@ function readSessions() {
 }
 
 /**
- * Is this session's `claude` process still alive? Signal 0 tests existence
- * without touching the process. EPERM means it exists but is not ours — which
- * should not happen for a same-user session, but counts as alive either way.
+ * Signal 0 tests a process's existence without touching it. EPERM means it is
+ * there but not ours, which counts as alive.
  */
 function pidAlive(pid) {
   if (!pid || pid <= 0) return false;
@@ -58,20 +57,79 @@ function pidAlive(pid) {
   }
 }
 
-/** Last non-empty line of a possibly large transcript, read from the tail. */
-function lastLine(file) {
+// How long a transcript can sit untouched before its session is presumed gone.
+// Generous on purpose: a session parked on a permission prompt writes nothing
+// while it waits for you, and that is exactly the session worth showing.
+const STALE_TRANSCRIPT = 30 * 60 * 1000;
+
+/**
+ * Is this session still running?
+ *
+ * The pid alone is not enough, and trusting it cost this feature dearly: the
+ * hook records process.ppid, which on macOS is the `claude` process itself, but
+ * on Windows Claude Code runs hooks through a shell — so ppid is that shell,
+ * already dead by the time anyone reads the file. Every session looked gone and
+ * the widget stayed empty while Claude was plainly working.
+ *
+ * So the pid is treated as proof of life when it holds, and the transcript —
+ * which a live session appends to as it works — decides when it does not.
+ */
+function isAlive(s) {
+  if (s.pid && pidAlive(s.pid)) return true;
+  if (s.transcript) {
+    try {
+      return Date.now() - fs.statSync(s.transcript).mtimeMs < STALE_TRANSCRIPT;
+    } catch { /* transcript gone */ }
+  }
+  // Nothing to disprove it with: a file that exists at all means a hook wrote it.
+  return !s.pid;
+}
+
+/** Tail of a possibly large transcript, newest line first. */
+function tailLines(file, span = 16384) {
   try {
     const size = fs.statSync(file).size;
-    const span = Math.min(size, 8192);
+    const take = Math.min(size, span);
     const fd = fs.openSync(file, 'r');
-    const buf = Buffer.alloc(span);
-    fs.readSync(fd, buf, 0, span, size - span);
+    const buf = Buffer.alloc(take);
+    fs.readSync(fd, buf, 0, take, size - take);
     fs.closeSync(fd);
-    const lines = buf.toString('utf8').split('\n').filter((l) => l.trim());
-    return lines.length ? lines[lines.length - 1] : '';
+    return buf.toString('utf8').split('\n').filter((l) => l.trim()).reverse();
   } catch {
-    return '';
+    return [];
   }
+}
+
+/**
+ * Did this session's last turn end with the user hitting Esc?
+ *
+ * Escape and a denied permission fire no hook, so the state file freezes on
+ * "thinking" forever; this is the net that catches it.
+ *
+ * It must parse rather than grep. The marker is a user turn whose text is
+ * literally "[Request interrupted by user]", and searching the raw JSON for that
+ * phrase matches the moment anyone so much as discusses it in the conversation —
+ * this very transcript contains it fifteen times for that reason, which silently
+ * hid every session.
+ */
+function lastTurnInterrupted(file) {
+  for (const line of tailLines(file)) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue; // a partial first line from the tail cut
+    }
+    if (entry.type !== 'user' && entry.type !== 'assistant') continue; // not a turn
+
+    if (entry.type === 'assistant') return false; // the last turn is Claude's; not an interrupt
+    const content = entry.message?.content;
+    const text = typeof content === 'string'
+      ? content
+      : Array.isArray(content) ? content.map((c) => c?.text ?? '').join(' ') : '';
+    return text.includes('[Request interrupted by user]');
+  }
+  return false;
 }
 
 /** The state to actually act on, once the recovery nets have had their say. */
@@ -80,7 +138,7 @@ function effectiveState(s, nowSec) {
   if (state === 'thinking' || state === 'tool' || state === 'permission') {
     const cap = state === 'permission' ? CAP_PERMISSION : CAP_WORKING;
     if (nowSec - (s.ts || 0) > cap) return 'idle';
-    if (s.transcript && lastLine(s.transcript).includes('interrupted by user')) return 'idle';
+    if (s.transcript && lastTurnInterrupted(s.transcript)) return 'idle';
     return state;
   }
   return state === 'done' ? 'idle' : state;
@@ -99,7 +157,7 @@ function activeSessions() {
   const nowSec = Math.floor(Date.now() / 1000);
 
   const live = readSessions()
-    .filter((s) => (s.pid ? pidAlive(s.pid) : true))
+    .filter(isAlive)
     .map((s) => ({ ...s, eff: effectiveState(s, nowSec) }))
     .filter((s) => PRIORITY[s.eff]);
 
