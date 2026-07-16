@@ -114,11 +114,13 @@ body.mac .meter { width: 52px; height: 5px; border-radius: 2.5px; }
   transition: width 240ms ease, background-color 240ms ease;
 }
 
+/* No reserved width: padding the percentage out to a fixed box only parks dead
+   space between it and its meter. tabular-nums already stops the digits jittering,
+   and the strip resizes itself anyway — the width only moves at 9→10 and 99→100. */
 .pct {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-body.win .pct { min-width: 34px; text-align: right; }
 
 /* ---------- Claude status ---------- */
 
