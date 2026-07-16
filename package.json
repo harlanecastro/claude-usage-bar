@@ -37,6 +37,7 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "icon": "build/icon.png",
     "mac": {
       "category": "public.app-category.utilities",
       "minimumSystemVersion": "12.0",

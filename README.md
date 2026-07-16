@@ -70,7 +70,11 @@ Two things the Windows build needs, and why:
   that from inside the asar — and koffi is what injects the strip into the taskbar,
   so getting this wrong breaks the whole Windows half.
 
-Neither build is signed, and both use the default Electron icon.
+Neither build is signed.
+
+The icon is `build/icon.png`, committed and 1254x1254 — electron-builder renders
+the Windows `.ico` and the macOS `.icns` from it, so a clone needs nothing else.
+Regenerate it with `npx electron scripts/unmatte-icon.js` if the source changes.
 
 ## How it gets the data
 
