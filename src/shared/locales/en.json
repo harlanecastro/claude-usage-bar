@@ -20,7 +20,6 @@
     "working": "Working…",
     "permission": "Waiting for you",
     "idle": "Claude is idle",
-    "notInstalled": "Status hooks are not installed",
     "tools": {
       "Bash": "Running a command",
       "Edit": "Editing",
@@ -36,9 +35,7 @@
       "TodoWrite": "Planning",
       "default": "Using a tool"
     },
-    "hooksStale": "Claude Code needs a restart",
-    "hooksStaleHint": "the status hooks came after these sessions started",
-    "notInstalledHint": "run: npm run install-hooks"
+    "idleHint": "No sessions running"
   },
   "duration": {
     "join": " ",

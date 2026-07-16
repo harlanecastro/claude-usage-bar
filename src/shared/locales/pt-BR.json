@@ -19,8 +19,7 @@
     "thinking": "Pensando…",
     "working": "Trabalhando…",
     "permission": "Aguardando interação",
-    "idle": "Claude está ocioso",
-    "notInstalled": "Os hooks de status não estão instalados",
+    "idle": "Claude parado",
     "tools": {
       "Bash": "Executando comando",
       "Edit": "Editando",
@@ -36,9 +35,7 @@
       "TodoWrite": "Planejando",
       "default": "Usando ferramenta"
     },
-    "hooksStale": "Reinicie o Claude Code",
-    "hooksStaleHint": "os hooks de status vieram depois destas sessões",
-    "notInstalledHint": "rode: npm run install-hooks"
+    "idleHint": "Nenhum processo em execução"
   },
   "duration": {
     "join": " e ",

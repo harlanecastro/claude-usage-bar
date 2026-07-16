@@ -5,7 +5,7 @@ const { getSettings, setSettings } = require('./config');
 const { Translator, resolveLanguage, availableLanguages } = require('./i18n');
 const auth = require('./auth');
 const { fetchUsage, isAuthError } = require('./usage');
-const { activeSessions, hooksInstalled, runningWithoutHooks } = require('./claude-status');
+const { activeSessions } = require('./claude-status');
 const { hostMonitors, resolveTaskbar } = require('./monitors');
 const { CRAB_FRAMES, CRAB_FPS } = require('../shared/status-frames');
 const { Widget, IS_MAC } = require('./widget');
@@ -139,22 +139,19 @@ function cycleSession() {
 function statusBlock(t) {
   const { session, sessions } = shownSession();
 
-  // Claude is working but the hooks are not reporting it. Say so rather than
-  // showing nothing, which is indistinguishable from "nothing is running" and
-  // sends people hunting for a bug that is not there.
-  if (!session && runningWithoutHooks() > 0) {
+  // Nothing running. Say so plainly: the block is switched on, so it owes an
+  // answer, and silence would read as a broken widget.
+  if (!session) {
     return {
       kind: 'status',
-      label: t.t(hooksInstalled() ? 'status.hooksStale' : 'status.notInstalled'),
-      sub: t.t(hooksInstalled() ? 'status.hooksStaleHint' : 'status.notInstalledHint'),
-      tone: 'amber',
+      label: t.t('status.idle'),
+      sub: t.t('status.idleHint'),
+      tone: null,
       animate: false,
       elapsed: null,
       count: 0,
     };
   }
-
-  if (!session) return null;
 
   // Only worth showing when there is something to cycle through.
   const count = sessions.length > 1 ? sessions.length : 0;
