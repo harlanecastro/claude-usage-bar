@@ -27,7 +27,11 @@
     "productName": "Claude Usage Bar",
     "files": [
       "src/**/*",
+      "hooks/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/koffi/**"
     ],
     "directories": {
       "output": "dist",

@@ -55,12 +55,22 @@ npm start
 Build installers:
 
 ```bash
-npm run dist:win     # NSIS + portable
+npm run dist:win     # NSIS installer + portable, into dist/
 npm run dist:mac     # dmg + zip, arm64 + x64, macOS 12+
 ```
 
 The macOS build must be produced **on a Mac** — electron-builder cannot cross-compile
 a signed `.app` from Windows. Clone the repo there and run `npm run dist:mac`.
+
+Two things the Windows build needs, and why:
+
+- **`hooks/**` is in `build.files`.** Without it the packaged app ships no hooks and
+  the status block can never be switched on.
+- **koffi is in `asarUnpack`.** It loads a native `.node` at runtime and cannot do
+  that from inside the asar — and koffi is what injects the strip into the taskbar,
+  so getting this wrong breaks the whole Windows half.
+
+Neither build is signed, and both use the default Electron icon.
 
 ## How it gets the data
 
