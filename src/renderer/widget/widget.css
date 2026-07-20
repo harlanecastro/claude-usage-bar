@@ -138,7 +138,20 @@ body.mac .meter { width: 52px; height: 5px; border-radius: 2.5px; }
   -webkit-mask-size: contain;
   mask-size: contain;
 }
-body.mac .icon { width: 13px; height: 13px; }
+/*
+ * The Mac box is not square, because the crab is not square.
+ *
+ * The sprite is 51x36, and `contain` fits it inside whatever box it is given —
+ * so a 13x13 box drew a 13x9.2 crab and threw away a third of its height, which
+ * is why it read as tiny next to 12.5px text. The Windows strip gets away with a
+ * square box: it has two lines, so the icon sits against a shorter label and the
+ * shortfall does not show. Here there is one row and nothing to hide behind.
+ *
+ * 23x16 matches the sprite's own proportions (23/16 is a hair wider than 51/36),
+ * so `contain` fills it on the height and the crab lands at the ~16pt every other
+ * icon in the macOS menu bar uses.
+ */
+body.mac .icon { width: 23px; height: 16px; }
 
 /* Amber is the "this one needs you" colour, borrowed from claude-status-bar. */
 .tone-amber { color: #f2ba2e; }

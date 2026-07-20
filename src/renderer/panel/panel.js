@@ -49,7 +49,20 @@ function render(view) {
   // Report the painted size so the window can be sized to fit and placed above
   // the taskbar. Synchronous on purpose: getBoundingClientRect forces layout.
   const r = root.getBoundingClientRect();
-  window.usagePanel.rendered({ width: Math.ceil(r.width), height: Math.ceil(r.height) });
+
+  // What the window owes is the body's border box, not the panel's: the rounded
+  // hairline border lives on the body, outside this element. Reporting the panel
+  // alone left the window 2px too small in each axis and the border clipped what
+  // it was supposed to frame. Read off the computed style rather than hardcoding
+  // the 1px, so this cannot drift away from the CSS.
+  const bodyStyle = getComputedStyle(document.body);
+  const bx = parseFloat(bodyStyle.borderLeftWidth) + parseFloat(bodyStyle.borderRightWidth);
+  const by = parseFloat(bodyStyle.borderTopWidth) + parseFloat(bodyStyle.borderBottomWidth);
+
+  window.usagePanel.rendered({
+    width: Math.ceil(r.width + bx),
+    height: Math.ceil(r.height + by),
+  });
 }
 
 window.usagePanel.onState(render);

@@ -15,7 +15,7 @@ you when it resets.
 
 Left click opens a panel with the meters you chose to hide — nothing opens if you
 hide nothing. Right click opens the menu, which can toggle meters and reach the
-usage page.
+detailed local consumption history.
 
 ## Claude Code status
 
@@ -43,7 +43,9 @@ write the same files and feed this just as well.
 | Left / right click | verified |
 | i18n + locale auto-detection | verified |
 | Live usage data | verified |
-| macOS | **unverified** — written, never run; no Mac available yet |
+| macOS menu bar + rendering | verified on macOS 12.7.6 (Monterey, Intel) |
+| macOS Retina | fixed and verified at a simulated 2x; never run on real Retina hardware |
+| macOS click handling, panel, live data | **unverified** — needs a signed-in Mac with a visible menu bar |
 
 ## Running
 
@@ -66,9 +68,9 @@ Two things the Windows build needs, and why:
 
 - **`hooks/**` is in `build.files`.** Without it the packaged app ships no hooks and
   the status block can never be switched on.
-- **koffi is in `asarUnpack`.** It loads a native `.node` at runtime and cannot do
-  that from inside the asar — and koffi is what injects the strip into the taskbar,
-  so getting this wrong breaks the whole Windows half.
+- **koffi and better-sqlite3 are in `asarUnpack`.** Both load native `.node`
+  binaries at runtime and cannot do that from inside the asar; they power the
+  taskbar injection and the local consumption ledger respectively.
 
 Neither build is signed.
 
@@ -78,12 +80,29 @@ Regenerate it with `npx electron scripts/unmatte-icon.js` if the source changes.
 
 ## How it gets the data
 
-There is no Anthropic API key and no token counting here, and no pricing table.
-You sign in to claude.ai in a normal browser window; the app keeps the `sessionKey`
-cookie it leaves behind (encrypted in the OS keychain via `safeStorage`) and polls
+There is no Anthropic API key and no pricing table. You sign in to claude.ai in a
+normal browser window; the app keeps the `sessionKey` cookie it leaves behind
+(encrypted in the OS keychain via `safeStorage`) and polls
 `claude.ai/api/organizations/{id}/usage` every 5 minutes. The percentages come back
 already computed by the server, so the widget cannot drift from what claude.ai
 itself shows.
+
+Detailed consumption is local and deliberately separate from that percentage. A
+background worker incrementally reads the usage blocks in
+`~/.claude/projects/**/*.jsonl`, deduplicates the repeated blocks of each API
+response, and writes the token categories, project/session identifiers and a
+truncated copy of the associated user prompt to SQLite. It never stores assistant
+responses or tool inputs; structured API failures such as quota interruptions are
+kept with their error code, HTTP status and short status message so requests with
+zero returned tokens do not disappear. The consumption screen groups every event
+under its associated user message and emphasizes input, output and their sum;
+cache categories remain available in the local ledger but are intentionally absent
+from this report. Messages and non-empty hourly buckets are shown newest first and
+are grouped only under five-hour reset windows the app actually observed from
+claude.ai; older records remain available as explicitly unclassified periods
+instead of being assigned to invented windows.
+Retention defaults to 30 days or 100 MB, whichever is reached first, and both
+limits are configurable.
 
 Requests go through a hidden `BrowserWindow` rather than `fetch`: Cloudflare blocks
 Node-shaped requests from Electron on header fingerprint alone.
@@ -171,6 +190,9 @@ src/
     widget.js         hosts the one renderer: real window on Win, Tray image on Mac
     auth.js           login window, sessionKey, keychain
     usage.js          claude.ai usage endpoints
+    consumption-store.js   SQLite ledger, window queries, retention
+    consumption-ingest.js  incremental Claude Code transcript parser
+    consumption-worker.js  keeps parsing and maintenance off the UI thread
     fetch-via-window.js
     i18n.js           translation + duration formatting
     config.js         electron-store settings
@@ -178,6 +200,7 @@ src/
     widget/           the strip. A dumb painter — every string arrives translated
     panel/            the hidden meters, on left click
     settings/         language, thresholds, meters, monitor, account
+    consumption/      per-window hourly timeline and usage ledger
   shared/locales/     en, pt-BR, es
 spike/                throwaway probes kept as documentation
 ```

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; style-src 'self'; script-src 'self'">
+  <title>Gráfico de consumo</title>
+  <link rel="stylesheet" href="consumption-chart.css">
+</head>
+<body>
+  <header><h1>Gráfico de consumo</h1></header>
+  <main>
+    <div class="chart-wrap" id="chartWrap">
+      <svg id="chart" role="img" aria-label="Comparação entre tempo com atividade e tokens consumidos por janela temporal"></svg>
+      <div class="tooltip" id="tooltip" hidden></div>
+    </div>
+    <div class="legend">
+      <span><i class="dot historical"></i>Período com limites não confirmados</span>
+      <span><i class="dot current"></i>Janela atual confirmada</span>
+      <span>Área destacada: menos tempo e mais tokens</span>
+    </div>
+    <p class="empty" id="empty" hidden>Não há janelas de consumo para comparar.</p>
+  </main>
+  <script src="consumption-chart.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ const state = {
   strings: null,
   meters: [],
   monitors: [],
+  platform: null,
 };
 
 const lookup = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), state.strings);
@@ -16,9 +17,20 @@ function applyStrings() {
   }
   document.title = lookup('settings.windowTitle') || 'Settings';
   renderZones();
+  renderMetersHint();
   renderMeters();
   renderMonitors();
   renderAuth();
+}
+
+/**
+ * The one hint that has to name the bar it is talking about, so it cannot come
+ * from data-i18n like the rest: on Windows the meters land in the taskbar, on
+ * macOS in the menu bar, and telling a Mac user about a taskbar is just wrong.
+ */
+function renderMetersHint() {
+  const key = state.platform === 'darwin' ? 'settings.metersHintMac' : 'settings.metersHint';
+  $('metersHint').textContent = lookup(key) || '';
 }
 
 // ---------- thresholds ----------
@@ -113,6 +125,29 @@ function bindSwitch(id, key) {
 
 bindSwitch('startAtLogin', 'startAtLogin');
 bindSwitch('alignLeft', 'alignLeft');
+
+function commitRetention() {
+  push({
+    consumptionRetention: {
+      days: Number($('retentionDays').value),
+      maxMb: Number($('retentionSize').value),
+    },
+  });
+}
+
+$('retentionDays').addEventListener('change', commitRetention);
+$('retentionSize').addEventListener('change', commitRetention);
+
+/**
+ * The corner toggle is a Windows idea: only the taskbar strip reads alignLeft, so
+ * on macOS it is a switch that flips and changes nothing, under a hint about a
+ * taskbar and a clock the Mac does not have. Where the item sits in the menu bar
+ * is macOS's call (Cmd+drag), never ours — so the whole row goes away, the same
+ * way the monitor picker does when there is nothing to pick.
+ */
+function renderAlign() {
+  $('alignLeftField').hidden = state.platform === 'darwin';
+}
 
 // ---------- monitors ----------
 
@@ -228,8 +263,11 @@ function syncControls() {
   $('startAtLogin').setAttribute('aria-checked', String(state.settings.startAtLogin));
   $('alignLeft').setAttribute('aria-checked', String(state.settings.alignLeft));
   $('lang').value = state.settings.language;
+  $('retentionDays').value = String(state.settings.consumptionRetention.days);
+  $('retentionSize').value = String(state.settings.consumptionRetention.maxMb);
   renderMeters();
   renderMonitors();
+  renderAlign();
 }
 
 // ---------- boot ----------
@@ -241,6 +279,7 @@ async function reload() {
   state.meters = data.meters ?? [];
   state.monitors = data.monitors ?? [];
   state.signedIn = data.signedIn;
+  state.platform = data.platform;
   applyStrings();
   syncControls();
 }
@@ -252,6 +291,7 @@ async function reload() {
   state.meters = data.meters ?? [];
   state.monitors = data.monitors ?? [];
   state.signedIn = data.signedIn;
+  state.platform = data.platform;
 
   const select = $('lang');
   // "Auto" is labelled in the language it would resolve to, so the option reads

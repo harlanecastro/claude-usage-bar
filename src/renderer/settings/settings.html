@@ -60,7 +60,8 @@
 
     <section class="field">
       <span class="field-label" data-i18n="settings.meters"></span>
-      <p class="field-hint" data-i18n="settings.metersHint"></p>
+      <!-- Text is chosen per platform — see renderMetersHint. -->
+      <p class="field-hint" id="metersHint"></p>
       <div class="meters" id="meters" role="group"></div>
     </section>
 
@@ -73,7 +74,8 @@
       <select id="monitor"></select>
     </section>
 
-    <section class="toggle-row">
+    <!-- Windows only: macOS decides where a menu bar item sits, not the app. -->
+    <section class="toggle-row" id="alignLeftField">
       <div class="txt">
         <span class="field-label" data-i18n="settings.alignLeft"></span>
         <p class="field-hint" data-i18n="settings.alignLeftHint"></p>
@@ -87,6 +89,23 @@
         <p class="field-hint" data-i18n="settings.startAtLoginHint"></p>
       </div>
       <button class="switch" id="startAtLogin" role="switch" aria-checked="false"></button>
+    </section>
+
+    <hr class="rule">
+
+    <section class="field">
+      <span class="field-label" data-i18n="settings.consumptionRetention"></span>
+      <p class="field-hint" data-i18n="settings.consumptionRetentionHint"></p>
+      <div class="retention-grid">
+        <label>
+          <span data-i18n="settings.retentionDays"></span>
+          <span class="number-input"><input id="retentionDays" type="number" min="7" max="365"><b data-i18n="settings.retentionDaysUnit"></b></span>
+        </label>
+        <label>
+          <span data-i18n="settings.retentionSize"></span>
+          <span class="number-input"><input id="retentionSize" type="number" min="25" max="1000"><b data-i18n="settings.retentionSizeUnit"></b></span>
+        </label>
+      </div>
     </section>
 
     <hr class="rule">

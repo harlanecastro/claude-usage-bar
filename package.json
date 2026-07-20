@@ -12,9 +12,12 @@
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
-    "install-hooks": "node hooks/install.js"
+    "install-hooks": "node hooks/install.js",
+    "test": "node scripts/run-electron-tests.js",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "better-sqlite3": "12.11.1",
     "electron-store": "^8.2.0",
     "koffi": "^3.1.1"
   },
@@ -31,7 +34,8 @@
       "package.json"
     ],
     "asarUnpack": [
-      "**/node_modules/koffi/**"
+      "**/node_modules/koffi/**",
+      "**/node_modules/better-sqlite3/**"
     ],
     "directories": {
       "output": "dist",

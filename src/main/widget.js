@@ -12,10 +12,37 @@
  * there is a single renderer and a single set of strings behind both surfaces.
  */
 const path = require('path');
-const { BrowserWindow, Tray, nativeImage, nativeTheme } = require('electron');
+const { BrowserWindow, Tray, nativeImage, nativeTheme, screen } = require('electron');
 
 const IS_MAC = process.platform === 'darwin';
 const MENU_BAR_HEIGHT = 22;
+
+/**
+ * Tags a capture with the scale it was really drawn at.
+ *
+ * capturePage hands back a HiDPI screen's device pixels — 598x44 for a 299x22
+ * widget at 2x — but reports them as a 1x image. The status item then reads every
+ * pixel as a point: the widget comes out twice as wide and its 44 points of
+ * content are crushed into a 24pt menu bar. The pixels are right, only the scale
+ * they claim is wrong, so this rebuilds the same buffer with the correct
+ * scaleFactor — which also keeps the Retina detail that resizing would throw away.
+ *
+ * Verified on macOS 12: without this the item measures 603pt wide, with it 304pt,
+ * the same as a 1x screen.
+ */
+function atDisplayScale(image, logicalWidth) {
+  const px = image.getSize();
+  // The ratio the pixels themselves prove, not a rounded guess: a fractional
+  // scale rounded to the nearest whole number lands on the wrong size entirely
+  // (a 1.5x capture tagged as 2x reports 224pt where it owes 299).
+  const scale = px.width / Math.max(1, logicalWidth);
+  if (scale <= 1) return image;
+  return nativeImage.createFromBitmap(image.getBitmap(), {
+    width: px.width,
+    height: px.height,
+    scaleFactor: scale,
+  });
+}
 
 class Widget {
   constructor({ onClick, resolveTarget }) {
@@ -28,6 +55,38 @@ class Widget {
     this.captureQueued = false;
     // Clickable regions the renderer laid out, in widget-local pixels.
     this.hits = [];
+    // The size of the image last handed to the host surface. The hit regions are
+    // laid out against this, not against whatever frame the host gives the image.
+    this.lastSize = { width: 0, height: 0 };
+  }
+
+  /**
+   * Where a click landed inside the widget, in the renderer's own coordinates.
+   *
+   * Deliberately ignores the `position` the tray event hands us. On macOS that
+   * point does not mean what the name suggests: it comes from the status item's
+   * own window, so its x is already item-local while its y is measured up from
+   * the bottom of the display. Subtracting the item's screen bounds from it — as
+   * this did — produced an x of roughly minus-the-screen-width and a y of about
+   * 890 on a 900px display. No hit region could ever contain that, so hitAt()
+   * returned null for every click, and every click fell through to the panel.
+   * That is the whole bug: the badge never cycled because the badge was never hit.
+   *
+   * The cursor's screen position is unambiguous by contract and is exactly where
+   * the click just happened, so it is what we measure from.
+   */
+  localPoint(bounds) {
+    if (!bounds) return null;
+    const cursor = screen.getCursorScreenPoint();
+    // The host centres the image inside a slightly roomier item — macOS reports a
+    // 304pt frame around a 299pt image — and the renderer measured its regions
+    // against the image. Take the padding back off before hit-testing.
+    const padX = Math.max(0, (bounds.width - this.lastSize.width) / 2);
+    const padY = Math.max(0, (bounds.height - this.lastSize.height) / 2);
+    return {
+      x: Math.round(cursor.x - bounds.x - padX),
+      y: Math.round(cursor.y - bounds.y - padY),
+    };
   }
 
   /**
@@ -92,12 +151,10 @@ class Widget {
 
     if (IS_MAC) {
       this.tray = new Tray(nativeImage.createEmpty());
-      // bounds is the status item's frame and position is where the click landed,
-      // both in screen coordinates — the difference is the widget-local point.
-      this.tray.on('click', (_e, bounds, position) => this.onClick('left', {
-        x: Math.round((position?.x ?? 0) - (bounds?.x ?? 0)),
-        y: Math.round((position?.y ?? 0) - (bounds?.y ?? 0)),
-      }));
+      // bounds is the status item's frame in screen coordinates; where the click
+      // landed inside it comes from the cursor, not from the event — see
+      // localPoint().
+      this.tray.on('click', (_e, bounds) => this.onClick('left', this.localPoint(bounds)));
       this.tray.on('right-click', () => this.onClick('right'));
     } else {
       const { TaskbarStrip } = require('./win32-taskbar');
@@ -129,6 +186,7 @@ class Widget {
     if (!this.win || this.win.isDestroyed()) return;
     const w = Math.max(1, width);
     const h = Math.max(1, IS_MAC ? MENU_BAR_HEIGHT : height);
+    this.lastSize = { width: w, height: h };
     this.win.setSize(w, h);
     this.queueCapture(w, h);
   }
@@ -148,7 +206,7 @@ class Widget {
         if (image.isEmpty()) return;
 
         if (IS_MAC) {
-          this.tray.setImage(image);
+          this.tray.setImage(atDisplayScale(image, width));
           return;
         }
 

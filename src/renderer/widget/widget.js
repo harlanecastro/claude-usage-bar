@@ -75,19 +75,38 @@ function winBlock(block) {
   return group;
 }
 
+/**
+ * The macOS row, where everything competes for the same horizontal inch.
+ *
+ * Deliberately not the Windows block minus a line break. The status says who is
+ * talking, what it is doing and for how long; a meter says which limit, how full,
+ * and when it comes back. Anything else is charged by the pixel against a bar
+ * that also has to hold the clock, the Wi-Fi and everything else the Mac put
+ * there first — so `sub`, which Windows gets for free on line 2, is dropped, and
+ * the countdown arrives pre-squeezed as `time`.
+ */
 function macBlock(block, parts) {
-  if (block.kind === 'status') parts.push(icon(block));
+  if (block.kind === 'status') {
+    parts.push(icon(block));
+    parts.push(el('span', block.tone ? `tone-${block.tone}` : null, block.label));
+    if (block.count) parts.push(badge(block.count));
+    if (block.elapsed) parts.push(el('span', 'clock', block.elapsed));
+    // The project name only earns its width once there is more than one session
+    // to tell apart — and it arrives with the badge, because a counter you can
+    // click through is useless if every session reads the same.
+    if (block.count && block.sub) {
+      parts.push(el('span', 'sep', '·'));
+      parts.push(el('span', null, block.sub));
+    }
+    return;
+  }
+
   parts.push(el('span', block.tone ? `tone-${block.tone}` : null, block.label));
-  if (block.count) parts.push(badge(block.count));
-  if (block.elapsed) parts.push(el('span', 'clock', block.elapsed));
   if (block.pct != null) {
     parts.push(el('span', `pct zone-${block.zone}`, `${Math.round(block.pct)}%`));
     parts.push(meter(block.pct, block.zone));
   }
-  if (block.sub) {
-    parts.push(el('span', 'sep', '·'));
-    parts.push(el('span', null, block.sub));
-  }
+  if (block.time) parts.push(el('span', 'clock', block.time));
 }
 
 function render(view) {

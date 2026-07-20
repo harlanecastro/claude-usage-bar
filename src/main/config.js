@@ -14,6 +14,10 @@ const DEFAULTS = {
   // Parks the strip in the taskbar's left corner instead of beside the clock —
   // dead space when the taskbar icons are centred.
   alignLeft: false,
+  // Detailed Claude Code usage is kept locally. Both limits are enforced: age
+  // handles normal rotation, while the size ceiling protects unusually busy
+  // installations from growing without bound.
+  consumptionRetention: { days: 30, maxMb: 100 },
 };
 
 const store = new Store({ name: 'settings' });
@@ -29,6 +33,8 @@ function getSettings() {
     startAtLogin: store.get('startAtLogin', DEFAULTS.startAtLogin),
     monitorId: store.get('monitorId', DEFAULTS.monitorId),
     alignLeft: store.get('alignLeft', DEFAULTS.alignLeft),
+    consumptionRetention: normalizeRetention(store.get(
+      'consumptionRetention', DEFAULTS.consumptionRetention)),
   };
 }
 
@@ -49,6 +55,16 @@ function normalizeThresholds(warn, crit) {
   return { warn: w, crit: c };
 }
 
+function normalizeRetention(value) {
+  const raw = value && typeof value === 'object' ? value : DEFAULTS.consumptionRetention;
+  const days = Number.isFinite(Number(raw.days)) ? Math.round(Number(raw.days)) : DEFAULTS.consumptionRetention.days;
+  const maxMb = Number.isFinite(Number(raw.maxMb)) ? Math.round(Number(raw.maxMb)) : DEFAULTS.consumptionRetention.maxMb;
+  return {
+    days: Math.min(Math.max(days, 7), 365),
+    maxMb: Math.min(Math.max(maxMb, 25), 1000),
+  };
+}
+
 function setSettings(patch) {
   if (patch.language !== undefined) store.set('language', patch.language);
   if (patch.thresholds) {
@@ -60,7 +76,12 @@ function setSettings(patch) {
     store.set('monitorId', Number.isFinite(patch.monitorId) ? patch.monitorId : null);
   }
   if (patch.alignLeft !== undefined) store.set('alignLeft', !!patch.alignLeft);
+  if (patch.consumptionRetention !== undefined) {
+    store.set('consumptionRetention', normalizeRetention(patch.consumptionRetention));
+  }
   return getSettings();
 }
 
-module.exports = { store, getSettings, setSettings, normalizeThresholds, normalizeMeters, DEFAULTS };
+module.exports = {
+  store, getSettings, setSettings, normalizeThresholds, normalizeMeters, normalizeRetention, DEFAULTS,
+};

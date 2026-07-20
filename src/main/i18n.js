@@ -75,6 +75,36 @@ class Translator {
     return parts.slice(0, 2).join(this.t('duration.join'));
   }
 
+  /**
+   * "3d4h" / "4h4m" / "39min" — the same two units, squeezed.
+   *
+   * Only the macOS bar uses this. There the countdown sits inline, where
+   * duration()'s deliberately unabbreviated wording costs 178px per meter and
+   * pushes everything else off the screen; the menu, the panel and the settings
+   * window all keep the long form, which is where there is room to read it.
+   *
+   * Every unit is spelled out, and the minutes are not padded: "4h04" saved a
+   * couple of pixels by dropping the unit, but a padded pair around an "h" reads
+   * as a clock — four minutes past four — which is the one thing this number is
+   * not. The width now moves by a character between 4h4m and 4h39m; that is worth
+   * it here, where the countdown only ticks once a minute. The elapsed clock in
+   * the status block stays padded precisely because it ticks every second.
+   */
+  durationShort(ms) {
+    if (ms <= 0) return this.t('duration.shortNow');
+
+    const totalMinutes = Math.floor(ms / 60000);
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+
+    if (days > 0) return `${days}d${hours}h`;
+    if (hours > 0) return `${hours}h${minutes}m`;
+    // Under a minute there is nothing left to round down to but zero, and "0min"
+    // reads as broken rather than as imminent.
+    return minutes > 0 ? this.t('duration.shortMinutes', { n: minutes }) : this.t('duration.shortNow');
+  }
+
   date(timestamp) {
     return new Intl.DateTimeFormat(this.language, { day: 'numeric', month: 'long' })
       .format(new Date(timestamp));

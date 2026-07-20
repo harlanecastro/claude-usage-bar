@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; style-src 'self'; script-src 'self'">
+  <title>Detalhes do consumo</title>
+  <link rel="stylesheet" href="consumption.css">
+</head>
+<body>
+  <header class="page-header">
+    <h1 data-i18n="title"></h1>
+    <label class="window-picker">
+      <span data-i18n="window"></span>
+      <select id="windowSelect" disabled></select>
+    </label>
+  </header>
+
+  <main class="layout">
+    <aside class="timeline-panel">
+      <div class="timeline-header">
+        <h2 data-i18n="timeline"></h2>
+        <span id="timelineRange"></span>
+      </div>
+      <button class="all-hours selected" id="allHours">
+        <span data-i18n="allWindow"></span>
+        <b id="windowTotal"></b>
+        <small id="windowMessageCount"></small>
+      </button>
+      <div class="timeline" id="timeline"></div>
+    </aside>
+
+    <section class="consumption-list">
+      <div class="list-header">
+        <div>
+          <h2 id="detailTitle"></h2>
+          <p id="detailSummary"></p>
+        </div>
+        <div class="period-total">
+          <span data-i18n="totalInputOutput"></span>
+          <strong id="filteredTotal"></strong>
+        </div>
+      </div>
+
+      <div class="message-table" id="tableScroll">
+        <div class="message-columns">
+          <span data-i18n="time"></span>
+          <span data-i18n="message"></span>
+          <span data-i18n="input"></span>
+          <span data-i18n="output"></span>
+          <span data-i18n="total"></span>
+          <span></span>
+        </div>
+        <div id="messageGroups"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="consumption.js"></script>
+</body>
+</html>

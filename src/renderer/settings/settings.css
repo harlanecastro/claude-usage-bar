@@ -73,6 +73,35 @@ select {
 }
 select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+.retention-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.retention-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.number-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.number-input input {
+  width: 92px;
+  padding: 7px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 13px var(--mono);
+}
+.number-input input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.number-input b { color: var(--muted); font-weight: 500; }
+
 /* ---------- three-zone slider ---------- */
 
 .zone-track {

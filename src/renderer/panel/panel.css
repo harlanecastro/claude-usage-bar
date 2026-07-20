@@ -53,6 +53,19 @@ body {
   flex-direction: column;
   gap: 14px;
   padding: 14px 16px;
+  /*
+   * Sized to its content, not to the window.
+   *
+   * A block-level box is as wide as whatever contains it, so measuring this one
+   * only ever handed the window its own width straight back — minus the 1px
+   * border on each side of the body, which sits outside it. The main process then
+   * resized the window to that answer, the next repaint measured the new width,
+   * and the panel walked itself 2px narrower every time paint() fired (once a
+   * second, or 12 times a second while the crab animates) until it hit the 220px
+   * floor in placePanel. max-content breaks the loop: the number reported is the
+   * content's own width, and it does not change when the window does.
+   */
+  width: max-content;
 }
 
 .row { display: flex; flex-direction: column; gap: 5px; }
