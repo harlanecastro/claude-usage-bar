@@ -35,6 +35,8 @@ const fallback = {
   dashConfigureTitle: 'Configure a fonte VPS', dashConfigureHint: 'Informe a URL e o token (somente leitura) da API do atendimento nas Configurações para ver o consumo da Sofia.',
   dashOpenSettings: 'Abrir Configurações', dashError: 'Não foi possível carregar a fonte VPS',
   dashDayUtc: 'dia UTC', vpsTurn: 'turno', vpsTurns: 'turnos', vpsProactive: 'proativo', vpsReactive: 'reativo',
+  vpsNoData: 'Conexão OK, mas ainda não há dados: a série diária da Sofia começa a acumular quando o atendimento estiver ligado.',
+  refresh: 'Recarregar',
 };
 
 const state = {
@@ -87,6 +89,9 @@ function applyStrings() {
   document.title = t('title');
   document.querySelectorAll('[data-i18n]').forEach((node) => {
     node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((node) => {
+    node.title = t(node.dataset.i18nTitle);
   });
 }
 
@@ -598,7 +603,15 @@ if (!windowThis.consumptionApi) {
     clearTimeout(changedTimer);
     changedTimer = setTimeout(() => {
       if (isLocalMessages()) void reload();
-      else if (state.source === 'local' && state.view === 'dashboard') void loadDashboard();
+      else if (state.source === 'local' && state.view === 'dashboard') {
+        // Ritmo próprio: o ingest emite 'changed' em rajada durante o uso; o
+        // dashboard re-renderiza no máximo a cada 5s (sem flash — ver loadDashboard).
+        const now = Date.now();
+        if (!windowThis.__dashLastRefresh || now - windowThis.__dashLastRefresh > 5000) {
+          windowThis.__dashLastRefresh = now;
+          void loadDashboard();
+        }
+      }
     }, 500);
   });
   windowThis.consumptionApi.onSelectWindow((range) => {
@@ -675,6 +688,19 @@ viewTabs.addEventListener('click', (event) => {
   if (button && button.dataset.view !== state.view) setMode(null, button.dataset.view);
 });
 
+const refreshButton = document.querySelector('#refreshBtn');
+refreshButton.addEventListener('click', async () => {
+  refreshButton.disabled = true;
+  try {
+    if (state.source === 'local') await windowThis.consumptionApi.refresh(); // re-varre transcripts
+    if (state.view === 'dashboard') await loadDashboard();
+    else if (state.source === 'vps') await loadVpsMessages();
+    else await reload();
+  } finally {
+    refreshButton.disabled = false;
+  }
+});
+
 /** Cabeçalho da tabela: a fonte VPS ganha as colunas Cache e Custo. */
 function renderMessageColumns() {
   if (!messageColumns) return;
@@ -720,12 +746,22 @@ windowThis.addEventListener('resize', () => {
 });
 
 function showDashboard(series, opts) {
-  lastDashboard = { series, opts };
+  lastDashboard = { series, opts, source: state.source };
+  if (state.source === 'vps' && Array.isArray(series) && series.length === 0
+      && !opts?.error && !opts?.notConfigured) {
+    // VPS respondeu 200 com série vazia: conexão OK, dados ainda por acumular.
+    dashboardView.replaceChildren(create('div', 'state-message', t('vpsNoData')));
+    return;
+  }
   renderDashboard(dashboardView, series, opts);
 }
 
 async function loadDashboard() {
-  dashboardView.replaceChildren(create('div', 'state-message', t('loading')));
+  // Só mostra "Carregando" quando NÃO há conteúdo desta fonte na tela — o
+  // ingest emite 'changed' o tempo todo durante o uso e o flash virava pisca.
+  if (!lastDashboard || lastDashboard.source !== state.source) {
+    dashboardView.replaceChildren(create('div', 'state-message', t('loading')));
+  }
   try {
     if (state.source === 'local') {
       const result = await windowThis.consumptionApi.daily({ days: 30 });

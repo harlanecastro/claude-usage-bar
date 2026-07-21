@@ -405,3 +405,12 @@ button, select { font: inherit; }
    .window-picker é flex…) — sem isto, a lista de mensagens continuava
    aparecendo embaixo do dashboard. */
 [hidden] { display: none !important; }
+
+/* Botão Recarregar do cabeçalho. */
+.refresh-btn {
+  border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2);
+  color: var(--muted); font-size: 15px; line-height: 1; padding: 8px 11px; cursor: pointer;
+}
+.refresh-btn:hover { color: var(--text); }
+.refresh-btn:disabled { opacity: .5; cursor: default; }
+.refresh-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

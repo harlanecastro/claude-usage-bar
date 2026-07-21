@@ -209,6 +209,8 @@
     "vpsTurn": "turno",
     "vpsTurns": "turnos",
     "vpsProactive": "proativo",
-    "vpsReactive": "reativo"
+    "vpsReactive": "reativo",
+    "vpsNoData": "Conexão OK, mas ainda não há dados: a série diária da Sofia começa a acumular quando o atendimento estiver ligado.",
+    "refresh": "Recarregar"
   }
 }
