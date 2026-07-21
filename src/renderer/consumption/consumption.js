@@ -735,7 +735,10 @@ function normalizeVpsSeries(rows) {
   });
 }
 
-let lastDashboard = null;
+// var de propósito: o bloco de init (no meio do arquivo) chama loadDashboard()
+// na primeira carga ANTES desta linha ser avaliada — com let seria TDZ
+// (ReferenceError engolido) e o dashboard só aparecia ao alternar de visão.
+var lastDashboard = null;
 
 windowThis.addEventListener('resize', () => {
   if (state.view !== 'dashboard' || !lastDashboard) return;
