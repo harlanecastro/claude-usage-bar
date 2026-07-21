@@ -625,10 +625,8 @@ if (!windowThis.consumptionApi) {
 // ===========================================================================
 
 function restoreMode() {
-  try {
-    const saved = JSON.parse(windowThis.localStorage.getItem('consumption-mode') || '{}');
-    if (saved.source === 'vps') state.source = 'vps';
-  } catch { /* modo padrão */ }
+  // A tela SEMPRE abre em Local + Dashboard — nada é restaurado; os toggles
+  // valem só enquanto a janela está aberta.
 }
 
 function persistMode() {
