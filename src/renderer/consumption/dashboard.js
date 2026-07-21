@@ -88,7 +88,10 @@ function renderDashChart(host, series, revampDate) {
     create('p', 'dash-sub', t('dashChartSub')),
   );
   const box = create('div', 'dash-chartbox');
-  const width = Math.max(640, series.length * 46 + 60);
+  host.append(section);
+  section.append(box); // no DOM antes de medir, pra ocupar a largura REAL
+  const measured = box.clientWidth ? box.clientWidth - 34 : 900;
+  const width = Math.max(measured, series.length * 26 + 64);
   const height = 240;
   const padL = 48;
   const padB = 26;
@@ -96,11 +99,9 @@ function renderDashChart(host, series, revampDate) {
   const svg = svgNode('svg', {
     width, height, role: 'img', 'aria-label': t('dashChartTitle'),
   });
-  const maxWeighted = Math.max(1, ...series.map((day) => Math.max(
-    weightedOf(day),
-    // A linha "sem cache" também precisa caber (read a preço cheio = 10×0,1).
-    day.input + 1.25 * day.cacheWrite + day.cacheRead + 5 * day.output,
-  )));
+  // Escala pelas BARRAS: a linha "sem cache" pode ser ordens de grandeza maior
+  // (cache leitura a preço cheio) e esmagaria tudo se ditasse o teto.
+  const maxWeighted = Math.max(1, ...series.map((day) => weightedOf(day)));
   const y = (value) => height - padB - (value / maxWeighted) * (height - padB - padT);
   const colors = {
     cacheWrite: 'var(--dash-cachewrite)',
@@ -139,11 +140,22 @@ function renderDashChart(host, series, revampDate) {
       acc += value;
     }
     // Hipotético SEM cache: read pagaria preço cheio (peso 1 em vez de 0,1).
+    // Só desenha quando cabe na escala; muito acima, vira uma seta de estouro
+    // discreta no topo (a economia exata está no raio-X e na tabela).
     const noCache = day.input + 1.25 * day.cacheWrite + day.cacheRead + 5 * day.output;
-    svg.append(svgNode('line', {
-      x1: x, y1: y(noCache), x2: x + bw, y2: y(noCache),
-      stroke: 'var(--dash-good)', 'stroke-width': 2, 'stroke-dasharray': '4 3',
-    }));
+    if (noCache <= maxWeighted * 1.12) {
+      svg.append(svgNode('line', {
+        x1: x, y1: y(noCache), x2: x + bw, y2: y(noCache),
+        stroke: 'var(--dash-good)', 'stroke-width': 2, 'stroke-dasharray': '4 3',
+      }));
+    } else if (weightedOf(day) > 0) {
+      const arrow = svgNode('text', {
+        x: x + bw / 2, y: padT + 8, 'text-anchor': 'middle',
+        fill: 'var(--dash-good)', 'font-size': 9,
+      });
+      arrow.textContent = '⇡';
+      svg.append(arrow);
+    }
     const dayLabel = svgNode('text', {
       x: x + bw / 2, y: height - 9, 'text-anchor': 'middle',
       fill: day.day === revampDate ? 'var(--accent)' : 'var(--muted)',
@@ -156,9 +168,16 @@ function renderDashChart(host, series, revampDate) {
         x1: x + bw + 2, y1: padT, x2: x + bw + 2, y2: height - padB,
         stroke: 'var(--accent)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4',
       }));
+      // Perto da borda direita (ex.: reengenharia no último dia) o rótulo
+      // ancora à ESQUERDA da linha pra não estourar o gráfico.
+      const fitsRight = x + bw + 110 <= width;
       const mark = svgNode('text', {
-        x: x + bw + 8, y: padT + 10, fill: 'var(--accent)',
-        'font-size': 10.5, 'font-weight': 700,
+        x: fitsRight ? x + bw + 8 : x + bw - 6,
+        y: padT + 10,
+        fill: 'var(--accent)',
+        'font-size': 10.5,
+        'font-weight': 700,
+        'text-anchor': fitsRight ? 'start' : 'end',
       });
       mark.textContent = `⚡ ${t('dashRevamp')}`;
       svg.append(mark);
@@ -181,8 +200,6 @@ function renderDashChart(host, series, revampDate) {
   noCacheItem.append(noCacheSwatch, document.createTextNode(t('dashNoCache')));
   legend.append(noCacheItem);
   box.append(legend);
-  section.append(box);
-  host.append(section);
 }
 
 function renderDashXray(host, series) {

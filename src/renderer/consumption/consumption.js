@@ -42,8 +42,9 @@ const state = {
   locale: 'pt-BR',
   // Fonte (local = este computador; vps = Sofia em produção) × visão
   // (messages = a listagem clássica; dashboard = visão agregada de economia).
+  // A tela SEMPRE abre no Dashboard; só a FONTE é lembrada entre aberturas.
   source: 'local',
-  view: 'messages',
+  view: 'dashboard',
   vpsDays: [],
   vpsSelectedDay: null,
   windows: [],
@@ -627,7 +628,6 @@ function restoreMode() {
   try {
     const saved = JSON.parse(windowThis.localStorage.getItem('consumption-mode') || '{}');
     if (saved.source === 'vps') state.source = 'vps';
-    if (saved.view === 'dashboard') state.view = 'dashboard';
   } catch { /* modo padrão */ }
 }
 
@@ -711,28 +711,43 @@ function normalizeVpsSeries(rows) {
   });
 }
 
+let lastDashboard = null;
+
+windowThis.addEventListener('resize', () => {
+  if (state.view !== 'dashboard' || !lastDashboard) return;
+  clearTimeout(windowThis.__dashResizeTimer);
+  windowThis.__dashResizeTimer = setTimeout(() => {
+    renderDashboard(dashboardView, lastDashboard.series, lastDashboard.opts);
+  }, 200);
+});
+
+function showDashboard(series, opts) {
+  lastDashboard = { series, opts };
+  renderDashboard(dashboardView, series, opts);
+}
+
 async function loadDashboard() {
   dashboardView.replaceChildren(create('div', 'state-message', t('loading')));
   try {
     if (state.source === 'local') {
       const result = await windowThis.consumptionApi.daily({ days: 30 });
-      renderDashboard(dashboardView, result?.series || [], { revampDate: result?.revampDate });
+      showDashboard(result?.series || [], { revampDate: result?.revampDate });
       return;
     }
     const result = await windowThis.consumptionApi.vpsUsage({ days: 30 });
     if (result?.error === 'not_configured') {
-      renderDashboard(dashboardView, [], { notConfigured: true });
+      showDashboard([], { notConfigured: true });
       return;
     }
     if (result?.error) {
-      renderDashboard(dashboardView, [], { error: result.error });
+      showDashboard([], { error: result.error });
       return;
     }
-    renderDashboard(dashboardView, normalizeVpsSeries(result?.data?.usage), {
+    showDashboard(normalizeVpsSeries(result?.data?.usage), {
       revampDate: result?.revampDate,
     });
   } catch (error) {
-    renderDashboard(dashboardView, [], { error: error.message });
+    showDashboard([], { error: error.message });
   }
 }
 
