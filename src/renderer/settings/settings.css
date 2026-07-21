@@ -102,6 +102,19 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .number-input input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .number-input b { color: var(--muted); font-weight: 500; }
 
+/* Campos de texto da fonte VPS — mesmo acabamento dos numéricos, largura cheia. */
+.text-input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 13px var(--mono);
+}
+.text-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.text-input::placeholder { color: var(--muted); }
+
 /* ---------- three-zone slider ---------- */
 
 .zone-track {
