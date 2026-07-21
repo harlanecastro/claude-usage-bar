@@ -194,8 +194,6 @@
     "dashNoCache": "Sem cache (hipotético)",
     "dashXrayTitle": "Raio-X do cache por dia",
     "dashXraySub": "Azul = lido a 10%; âmbar = criado a 125%.",
-    "dashFormulasTitle": "Como a economia é calculada",
-    "dashFormulasSub": "Transparência das fórmulas exibidas.",
     "dashSeriesTitle": "Série diária",
     "dashDay": "Dia",
     "dashCacheCol": "Cache",

@@ -30,7 +30,6 @@ const fallback = {
   dashCacheWrite: 'Cache escrita (1,25×)', dashCacheRead: 'Cache leitura (0,1×)',
   dashNoCache: 'Sem cache (hipotético)',
   dashXrayTitle: 'Raio-X do cache por dia', dashXraySub: 'Azul = lido a 10%; âmbar = criado a 125%.',
-  dashFormulasTitle: 'Como a economia é calculada', dashFormulasSub: 'Transparência das fórmulas exibidas.',
   dashSeriesTitle: 'Série diária', dashDay: 'Dia', dashCacheCol: 'Cache',
   dashConfigureTitle: 'Configure a fonte VPS', dashConfigureHint: 'Informe a URL e o token (somente leitura) da API do atendimento nas Configurações para ver o consumo da Sofia.',
   dashOpenSettings: 'Abrir Configurações', dashError: 'Não foi possível carregar a fonte VPS',

@@ -8,8 +8,13 @@
 }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font:16px system-ui,sans-serif; }
-header { padding:22px 28px 8px; }
+header { padding:22px 28px 8px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
 h1 { margin:0; font-size:24px; font-weight:650; }
+.segmented { display:inline-flex; border:1px solid var(--grid); border-radius:9px; overflow:hidden; background:var(--panel); }
+.segmented button { appearance:none; border:0; background:transparent; color:var(--muted); font:600 13px system-ui,sans-serif; padding:7px 16px; cursor:pointer; }
+.segmented button.on { background:var(--blue); color:var(--bg); }
+.segmented button:not(.on):hover { color:var(--text); }
+[hidden] { display:none !important; }
 main { padding:12px 28px 28px; }
 .chart-wrap { position:relative; min-height:480px; }
 #chart { display:block; width:100%; height:clamp(480px,68vh,720px); overflow:visible; }

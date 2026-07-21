@@ -8,16 +8,27 @@
   <link rel="stylesheet" href="consumption-chart.css">
 </head>
 <body>
-  <header><h1>Gráfico de consumo</h1></header>
+  <header>
+    <h1>Gráfico de consumo</h1>
+    <div class="segmented" id="sourceTabs" role="tablist" aria-label="Fonte">
+      <button type="button" data-source="local" class="on">Local</button>
+      <button type="button" data-source="vps">VPS</button>
+    </div>
+  </header>
   <main>
     <div class="chart-wrap" id="chartWrap">
-      <svg id="chart" role="img" aria-label="Comparação entre tempo com atividade e tokens consumidos por janela temporal"></svg>
+      <svg id="chart" role="img" aria-label="Dispersão do consumo de tokens por período"></svg>
       <div class="tooltip" id="tooltip" hidden></div>
     </div>
-    <div class="legend">
+    <div class="legend" id="legendLocal">
       <span><i class="dot historical"></i>Período com limites não confirmados</span>
       <span><i class="dot current"></i>Janela atual confirmada</span>
       <span>Área destacada: menos tempo e mais tokens</span>
+    </div>
+    <div class="legend" id="legendVps" hidden>
+      <span><i class="dot historical"></i>Dia de consumo da Sofia (VPS)</span>
+      <span>Ponderado: input + 1,25×write + 0,1×read + 5×output</span>
+      <span>Área destacada: menos turnos e mais tokens</span>
     </div>
     <p class="empty" id="empty" hidden>Não há janelas de consumo para comparar.</p>
   </main>

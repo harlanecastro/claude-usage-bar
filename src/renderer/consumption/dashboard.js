@@ -183,9 +183,8 @@ function renderDashChart(host, series) {
 }
 
 function renderDashXray(host, series) {
-  const section = create('section', 'dash-section dash-xray');
-  const left = create('div');
-  left.append(
+  const section = create('section', 'dash-section');
+  section.append(
     create('h2', null, t('dashXrayTitle')),
     create('p', 'dash-sub', t('dashXraySub')),
   );
@@ -209,25 +208,7 @@ function renderDashXray(host, series) {
     );
     list.append(row);
   }
-  left.append(list);
-
-  const right = create('div');
-  right.append(
-    create('h2', null, t('dashFormulasTitle')),
-    create('p', 'dash-sub', t('dashFormulasSub')),
-  );
-  const panel = create('div', 'dash-panel dash-formulas');
-  for (const [label, formula] of [
-    [t('dashCacheShare'), 'read ÷ (read + write + input)'],
-    [t('dashSavings'), 'read × 0,9 × preço de entrada'],
-    [t('dashWeighted'), 'input + 1,25×write + 0,1×read + 5×output'],
-  ]) {
-    const line = create('div', 'dash-formula');
-    line.append(create('strong', null, label), create('code', null, formula));
-    panel.append(line);
-  }
-  right.append(panel);
-  section.append(left, right);
+  section.append(list);
   host.append(section);
 }
 
