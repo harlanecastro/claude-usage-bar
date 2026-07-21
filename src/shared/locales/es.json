@@ -100,7 +100,11 @@
     "retentionDaysUnit": "días",
     "retentionSize": "Límite de la base",
     "retentionSizeUnit": "MB",
-    "madeBy": "Hecho por"
+    "madeBy": "Hecho por",
+    "vps": "Consumo de Sofia (VPS)",
+    "vpsHint": "URL de la plataforma y token de SOLO LECTURA — habilitan la fuente \"VPS\" en la pantalla de detalles de consumo.",
+    "vpsUrl": "URL",
+    "vpsToken": "Token (solo lectura)"
   },
   "consumption": {
     "title": "Detalles del consumo",

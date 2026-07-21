@@ -10,13 +10,25 @@
 <body>
   <header class="page-header">
     <h1 data-i18n="title"></h1>
-    <label class="window-picker">
-      <span data-i18n="window"></span>
-      <select id="windowSelect" disabled></select>
-    </label>
+    <div class="header-controls">
+      <div class="segmented" id="sourceTabs" role="tablist" aria-label="Fonte">
+        <button type="button" data-source="local" class="on" data-i18n="sourceLocal"></button>
+        <button type="button" data-source="vps" data-i18n="sourceVps"></button>
+      </div>
+      <div class="segmented" id="viewTabs" role="tablist" aria-label="Visão">
+        <button type="button" data-view="dashboard" data-i18n="viewDashboard"></button>
+        <button type="button" data-view="messages" class="on" data-i18n="viewMessages"></button>
+      </div>
+      <label class="window-picker" id="windowPicker">
+        <span data-i18n="window"></span>
+        <select id="windowSelect" disabled></select>
+      </label>
+    </div>
   </header>
 
-  <main class="layout">
+  <main class="dashboard-host" id="dashboardView" hidden></main>
+
+  <main class="layout" id="messagesView">
     <aside class="timeline-panel">
       <div class="timeline-header">
         <h2 data-i18n="timeline"></h2>
@@ -57,5 +69,6 @@
   </main>
 
   <script src="consumption.js"></script>
+  <script src="dashboard.js"></script>
 </body>
 </html>

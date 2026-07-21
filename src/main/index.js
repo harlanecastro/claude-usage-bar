@@ -12,6 +12,8 @@ const { CRAB_FRAMES, CRAB_FPS } = require('../shared/status-frames');
 const { Widget, IS_MAC } = require('./widget');
 const { ConsumptionStore } = require('./consumption-store');
 const { ConsumptionService } = require('./consumption-service');
+const pricing = require('./pricing');
+const vpsUsage = require('./vps-usage');
 
 // NOTE: do not add app.disableHardwareAcceleration() here. With the GPU off,
 // Chromium stops painting once the window is reparented into the Windows
@@ -770,6 +772,61 @@ ipcMain.handle('consumption:refresh', async (event) => {
   if (!validConsumptionSender(event)) throw new Error('Forbidden');
   if (!consumptionIngest) return { changed: 0 };
   return consumptionIngest.scan();
+});
+
+// Dashboard — série DIÁRIA local: agrega o SQLite por dia (fuso do computador)
+// e aplica o pricing estático por modelo (custo "estimado", rotulado na UI).
+ipcMain.handle('consumption:daily', (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  if (!consumptionStore) throw new Error(consumptionError || 'ConsumptionStoreUnavailable');
+  const rows = consumptionStore.summarizeDaily(Number(request?.days) || 30);
+  const byDay = new Map();
+  for (const row of rows) {
+    let day = byDay.get(row.day);
+    if (!day) {
+      day = {
+        day: row.day, turns: 0, input: 0, cacheWrite: 0, cacheRead: 0, output: 0,
+        costUsd: 0, hypotheticalUsd: 0, estimated: true,
+      };
+      byDay.set(row.day, day);
+    }
+    day.turns += row.turns;
+    day.input += row.input_tokens;
+    day.cacheWrite += row.cache_creation_tokens;
+    day.cacheRead += row.cache_read_tokens;
+    day.output += row.output_tokens;
+    const cost = pricing.costFor(row.model, {
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cacheReadTokens: row.cache_read_tokens,
+      cacheCreationTokens: row.cache_creation_tokens,
+    });
+    day.costUsd += cost.costUsd;
+    day.hypotheticalUsd += cost.hypotheticalUsd;
+  }
+  return {
+    series: [...byDay.values()],
+    revampDate: getSettings().cacheRevampDate,
+  };
+});
+
+// Dashboard — fonte VPS (consumo real da Sofia via módulo PrestaShop). O fetch
+// vive no MAIN (CSP das telas bloqueia rede no renderer).
+ipcMain.handle('consumption:vps-usage', async (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  const result = await vpsUsage.fetchAiUsage(Number(request?.days) || 30);
+  return { ...result, revampDate: getSettings().cacheRevampDate };
+});
+
+ipcMain.handle('consumption:vps-turns', (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  return vpsUsage.fetchAiTurns(request?.day);
+});
+
+// Card "Configure a VPS" da tela de consumo abre as Configurações.
+ipcMain.handle('consumption:open-settings', (event) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  openSettings();
 });
 
 /**

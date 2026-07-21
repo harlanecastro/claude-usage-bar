@@ -18,6 +18,12 @@ const DEFAULTS = {
   // handles normal rotation, while the size ceiling protects unusually busy
   // installations from growing without bound.
   consumptionRetention: { days: 30, maxMb: 100 },
+  // Fonte "VPS" da tela de consumo: a API do módulo PrestaShop que agrega o
+  // consumo REAL da Sofia (action=ai_usage / ai_turns). Token READ-ONLY basta.
+  vpsUrl: '',
+  vpsToken: '',
+  // Marcador "⚡ reengenharia" no gráfico do dashboard (fim do --resume).
+  cacheRevampDate: '2026-07-21',
 };
 
 const store = new Store({ name: 'settings' });
@@ -35,7 +41,21 @@ function getSettings() {
     alignLeft: store.get('alignLeft', DEFAULTS.alignLeft),
     consumptionRetention: normalizeRetention(store.get(
       'consumptionRetention', DEFAULTS.consumptionRetention)),
+    vpsUrl: normalizeVpsUrl(store.get('vpsUrl', DEFAULTS.vpsUrl)),
+    vpsToken: String(store.get('vpsToken', DEFAULTS.vpsToken) || '').trim(),
+    cacheRevampDate: normalizeDate(store.get('cacheRevampDate', DEFAULTS.cacheRevampDate)),
   };
+}
+
+/** URL http(s) sem barra final; qualquer outra coisa vira '' (não configurado). */
+function normalizeVpsUrl(value) {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  return /^https?:\/\/.+/i.test(raw) ? raw : '';
+}
+
+function normalizeDate(value) {
+  const raw = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : DEFAULTS.cacheRevampDate;
 }
 
 /**
@@ -79,6 +99,9 @@ function setSettings(patch) {
   if (patch.consumptionRetention !== undefined) {
     store.set('consumptionRetention', normalizeRetention(patch.consumptionRetention));
   }
+  if (patch.vpsUrl !== undefined) store.set('vpsUrl', normalizeVpsUrl(patch.vpsUrl));
+  if (patch.vpsToken !== undefined) store.set('vpsToken', String(patch.vpsToken || '').trim());
+  if (patch.cacheRevampDate !== undefined) store.set('cacheRevampDate', normalizeDate(patch.cacheRevampDate));
   return getSettings();
 }
 

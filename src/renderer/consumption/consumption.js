@@ -20,11 +20,32 @@ const fallback = {
   tools: 'Ferramentas: {names}', errorCode: 'Erro', httpStatus: 'HTTP',
   project: 'Projeto', branch: 'Branch', model: 'Modelo', depth: 'Profundidade',
   sessionId: 'Sessão', requestId: 'Requisição', messageId: 'Mensagem', recordId: 'Registro',
+  sourceLocal: 'Local', sourceVps: 'VPS', viewDashboard: 'Dashboard', viewMessages: 'Mensagens',
+  cache: 'Cache', cost: 'Custo', dashTurns: 'Turnos', dashWeighted: 'Tokens (ponderado)',
+  dashCost: 'Custo', dashCostDay: 'no dia', dashEstimated: 'estimado',
+  dashSavings: 'Economia de cache', dashSavingsHint: 'lido a 10% em vez do preço cheio',
+  dashCacheShare: 'Cache aproveitado', dashCacheShareHint: 'do contexto veio quente',
+  dashChartTitle: 'Consumo diário × economia de cache',
+  dashChartSub: 'Barras: tokens ponderados por categoria. Linha pontilhada: o dia SEM cache — a distância até a barra é a economia.',
+  dashCacheWrite: 'Cache escrita (1,25×)', dashCacheRead: 'Cache leitura (0,1×)',
+  dashNoCache: 'Sem cache (hipotético)', dashRevamp: 'reengenharia',
+  dashXrayTitle: 'Raio-X do cache por dia', dashXraySub: 'Azul = lido a 10%; âmbar = criado a 125%.',
+  dashFormulasTitle: 'Como a economia é calculada', dashFormulasSub: 'Transparência das fórmulas exibidas.',
+  dashSeriesTitle: 'Série diária', dashDay: 'Dia', dashCacheCol: 'Cache', dashEraOld: 'era --resume',
+  dashConfigureTitle: 'Configure a fonte VPS', dashConfigureHint: 'Informe a URL e o token (somente leitura) da API do atendimento nas Configurações para ver o consumo da Sofia.',
+  dashOpenSettings: 'Abrir Configurações', dashError: 'Não foi possível carregar a fonte VPS',
+  dashDayUtc: 'dia UTC', vpsTurn: 'turno', vpsTurns: 'turnos', vpsProactive: 'proativo', vpsReactive: 'reativo',
 };
 
 const state = {
   strings: fallback,
   locale: 'pt-BR',
+  // Fonte (local = este computador; vps = Sofia em produção) × visão
+  // (messages = a listagem clássica; dashboard = visão agregada de economia).
+  source: 'local',
+  view: 'messages',
+  vpsDays: [],
+  vpsSelectedDay: null,
   windows: [],
   selectedWindow: null,
   selectedHour: null,
@@ -41,6 +62,16 @@ const timeline = document.querySelector('#timeline');
 const allHours = document.querySelector('#allHours');
 const messageGroups = document.querySelector('#messageGroups');
 const tableScroll = document.querySelector('#tableScroll');
+const sourceTabs = document.querySelector('#sourceTabs');
+const viewTabs = document.querySelector('#viewTabs');
+const windowPicker = document.querySelector('#windowPicker');
+const dashboardView = document.querySelector('#dashboardView');
+const messagesView = document.querySelector('#messagesView');
+const messageColumns = document.querySelector('.message-columns');
+
+function isLocalMessages() {
+  return state.source === 'local' && state.view === 'messages';
+}
 
 function t(key, values = {}) {
   let result = state.strings[key] || fallback[key] || key;
@@ -522,7 +553,9 @@ async function reload() {
     state.locale = overview?.locale || 'pt-BR';
     state.windows = Array.isArray(overview?.windows) ? overview.windows : [];
     applyStrings();
-    await loadWindow(preferredWindow(state.windows, previousWindow), previousHour);
+    if (isLocalMessages()) {
+      await loadWindow(preferredWindow(state.windows, previousWindow), previousHour);
+    }
   } catch (error) {
     state.generation += 1;
     state.windows = [];
@@ -562,7 +595,10 @@ if (!windowThis.consumptionApi) {
   let changedTimer = null;
   windowThis.consumptionApi.onChanged(() => {
     clearTimeout(changedTimer);
-    changedTimer = setTimeout(() => void reload(), 500);
+    changedTimer = setTimeout(() => {
+      if (isLocalMessages()) void reload();
+      else if (state.source === 'local' && state.view === 'dashboard') void loadDashboard();
+    }, 500);
   });
   windowThis.consumptionApi.onSelectWindow((range) => {
     state.requestedRange = { startAt: Number(range?.startAt), endAt: Number(range?.endAt) };
@@ -576,5 +612,244 @@ if (!windowThis.consumptionApi) {
   });
   applyStrings();
   renderMessages();
+  restoreMode();
   void reload();
+  if (!isLocalMessages()) updateModeUI();
+}
+
+
+// ===========================================================================
+// FONTE (Local | VPS) × VISÃO (Dashboard | Mensagens)
+// Local+Mensagens é o fluxo clássico acima, intocado. O resto orquestra aqui.
+// ===========================================================================
+
+function restoreMode() {
+  try {
+    const saved = JSON.parse(windowThis.localStorage.getItem('consumption-mode') || '{}');
+    if (saved.source === 'vps') state.source = 'vps';
+    if (saved.view === 'dashboard') state.view = 'dashboard';
+  } catch { /* modo padrão */ }
+}
+
+function persistMode() {
+  try {
+    windowThis.localStorage.setItem('consumption-mode',
+      JSON.stringify({ source: state.source, view: state.view }));
+  } catch { /* sem persistência, sem drama */ }
+}
+
+function updateModeUI() {
+  sourceTabs.querySelectorAll('button').forEach((button) => {
+    button.classList.toggle('on', button.dataset.source === state.source);
+  });
+  viewTabs.querySelectorAll('button').forEach((button) => {
+    button.classList.toggle('on', button.dataset.view === state.view);
+  });
+  const dashboard = state.view === 'dashboard';
+  dashboardView.hidden = !dashboard;
+  messagesView.hidden = dashboard;
+  // O seletor de janela de 5h só faz sentido no fluxo local clássico; na fonte
+  // VPS o dia é escolhido na própria linha do tempo.
+  windowPicker.hidden = dashboard || state.source === 'vps';
+  renderMessageColumns();
+  if (dashboard) {
+    void loadDashboard();
+  } else if (state.source === 'vps') {
+    void loadVpsMessages();
+  } else {
+    void reload();
+  }
+}
+
+function setMode(source, view) {
+  if (source) state.source = source;
+  if (view) state.view = view;
+  persistMode();
+  updateModeUI();
+}
+
+sourceTabs.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-source]');
+  if (button && button.dataset.source !== state.source) setMode(button.dataset.source, null);
+});
+viewTabs.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-view]');
+  if (button && button.dataset.view !== state.view) setMode(null, button.dataset.view);
+});
+
+/** Cabeçalho da tabela: a fonte VPS ganha as colunas Cache e Custo. */
+function renderMessageColumns() {
+  if (!messageColumns) return;
+  messageColumns.classList.toggle('vps', state.source === 'vps');
+  messageColumns.replaceChildren();
+  const labels = state.source === 'vps'
+    ? [t('time'), t('message'), t('input'), t('output'), t('cache'), t('cost'), t('total'), '']
+    : [t('time'), t('message'), t('input'), t('output'), t('total'), ''];
+  for (const label of labels) messageColumns.append(create('span', null, label));
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard (as duas fontes entregam a MESMA série normalizada ao dashboard.js)
+// ---------------------------------------------------------------------------
+
+function normalizeVpsSeries(rows) {
+  const SONNET_INPUT_PER_TOKEN = 3 / 1e6; // economia derivada do preço de entrada
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const cacheRead = Number(row.cache_read_tokens) || 0;
+    const costUsd = Number(row.cost_usd) || 0;
+    return {
+      day: String(row.day),
+      turns: Number(row.turns) || 0,
+      input: Number(row.input_tokens) || 0,
+      cacheWrite: Number(row.cache_write_tokens) || 0,
+      cacheRead,
+      output: Number(row.output_tokens) || 0,
+      costUsd,
+      hypotheticalUsd: costUsd + cacheRead * 0.9 * SONNET_INPUT_PER_TOKEN,
+      estimated: false,
+    };
+  });
+}
+
+async function loadDashboard() {
+  dashboardView.replaceChildren(create('div', 'state-message', t('loading')));
+  try {
+    if (state.source === 'local') {
+      const result = await windowThis.consumptionApi.daily({ days: 30 });
+      renderDashboard(dashboardView, result?.series || [], { revampDate: result?.revampDate });
+      return;
+    }
+    const result = await windowThis.consumptionApi.vpsUsage({ days: 30 });
+    if (result?.error === 'not_configured') {
+      renderDashboard(dashboardView, [], { notConfigured: true });
+      return;
+    }
+    if (result?.error) {
+      renderDashboard(dashboardView, [], { error: result.error });
+      return;
+    }
+    renderDashboard(dashboardView, normalizeVpsSeries(result?.data?.usage), {
+      revampDate: result?.revampDate,
+    });
+  } catch (error) {
+    renderDashboard(dashboardView, [], { error: error.message });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// VPS + Mensagens: linha do tempo por DIA (ai_usage) + turnos do dia (ai_turns)
+// ---------------------------------------------------------------------------
+
+function vpsStateMessage(text) {
+  messageGroups.replaceChildren(create('div', 'state-message', text));
+}
+
+function renderVpsDays() {
+  timeline.replaceChildren();
+  const totals = state.vpsDays.reduce((sum, day) => ({
+    tokens: sum.tokens + day.input_tokens + day.output_tokens,
+    turns: sum.turns + day.turns,
+  }), { tokens: 0, turns: 0 });
+  document.querySelector('#timelineRange').textContent = t('dashDayUtc');
+  document.querySelector('#windowTotal').textContent = number(totals.tokens);
+  document.querySelector('#windowMessageCount').textContent =
+    `${number(totals.turns)} ${t(totals.turns === 1 ? 'vpsTurn' : 'vpsTurns')}`;
+  allHours.classList.toggle('selected', false);
+  for (const day of [...state.vpsDays].reverse()) {
+    const button = create('button', 'hour');
+    button.type = 'button';
+    if (state.vpsSelectedDay === day.day) button.classList.add('selected');
+    button.append(
+      create('span', 'hour-time', day.day),
+      create('b', 'hour-total', number(day.input_tokens + day.output_tokens)),
+      create('span', 'hour-count', `${number(day.turns)} ${t(day.turns === 1 ? 'vpsTurn' : 'vpsTurns')}`),
+    );
+    button.addEventListener('click', () => {
+      state.vpsSelectedDay = day.day;
+      renderVpsDays();
+      void loadVpsTurns(day.day);
+    });
+    timeline.append(button);
+  }
+}
+
+function vpsTurnRow(turn) {
+  const details = create('details', 'message-group');
+  const summary = create('summary', 'message-summary vps');
+  const copy = create('span', 'message-copy');
+  copy.append(create('strong', null, turn.excerpt || `···${turn.phone_suffix || ''}`));
+  const usage = turn.usage || null;
+  const cacheShare = usage
+    ? Math.round(100 * (usage.cache_read_input_tokens || 0)
+      / Math.max(1, (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0)
+        + (usage.input_tokens || 0)))
+    : null;
+  copy.append(create('small', null, [
+    turn.proactive ? t('vpsProactive') : t('vpsReactive'),
+    turn.phone_suffix ? `···${turn.phone_suffix}` : null,
+  ].filter(Boolean).join(' · ')));
+  summary.append(
+    create('span', 'message-time', turn.time || ''),
+    copy,
+    create('span', 'metric', usage ? number(usage.input_tokens + usage.cache_creation_input_tokens
+      + usage.cache_read_input_tokens) : '—'),
+    create('span', 'metric', usage ? number(usage.output_tokens) : '—'),
+    create('span', 'metric cache', cacheShare == null ? '—' : `${cacheShare}%`),
+    create('span', 'metric cost', turn.total_cost_usd == null ? '—'
+      : new Intl.NumberFormat(state.locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 3 })
+        .format(turn.total_cost_usd)),
+    create('span', 'metric total', usage ? number(usage.input_tokens + usage.cache_creation_input_tokens
+      + usage.cache_read_input_tokens + usage.output_tokens) : '—'),
+    create('span', 'chevron', '›'),
+  );
+  details.append(summary);
+  return details;
+}
+
+async function loadVpsTurns(day) {
+  const title = document.querySelector('#detailTitle');
+  const summary = document.querySelector('#detailSummary');
+  const total = document.querySelector('#filteredTotal');
+  vpsStateMessage(t('loading'));
+  const result = await windowThis.consumptionApi.vpsTurns({ day });
+  if (result?.error) {
+    vpsStateMessage(`${t('dashError')} (${result.error})`);
+    return;
+  }
+  const turns = Array.isArray(result?.data?.turns) ? result.data.turns : [];
+  title.textContent = `${t('messagesProcessed')} · ${day}`;
+  summary.textContent = `${number(turns.length)} ${t(turns.length === 1 ? 'vpsTurn' : 'vpsTurns')}`;
+  const totalTokens = turns.reduce((sum, turn) => sum + (turn.usage
+    ? (turn.usage.input_tokens || 0) + (turn.usage.cache_creation_input_tokens || 0)
+      + (turn.usage.cache_read_input_tokens || 0) + (turn.usage.output_tokens || 0)
+    : 0), 0);
+  total.textContent = `${number(totalTokens)} ${t('tokens')}`;
+  messageGroups.replaceChildren();
+  if (!turns.length) {
+    vpsStateMessage(t('noMessages'));
+    return;
+  }
+  for (const turn of turns) messageGroups.append(vpsTurnRow(turn));
+}
+
+async function loadVpsMessages() {
+  vpsStateMessage(t('loading'));
+  timeline.replaceChildren();
+  const result = await windowThis.consumptionApi.vpsUsage({ days: 30 });
+  if (result?.error === 'not_configured') {
+    timeline.replaceChildren();
+    messageGroups.replaceChildren();
+    renderDashboard(messageGroups, [], { notConfigured: true });
+    return;
+  }
+  if (result?.error) {
+    vpsStateMessage(`${t('dashError')} (${result.error})`);
+    return;
+  }
+  state.vpsDays = Array.isArray(result?.data?.usage) ? result.data.usage : [];
+  state.vpsSelectedDay = state.vpsDays.length
+    ? state.vpsDays[state.vpsDays.length - 1].day : null;
+  renderVpsDays();
+  if (state.vpsSelectedDay) await loadVpsTurns(state.vpsSelectedDay);
+  else vpsStateMessage(t('noMessages'));
 }

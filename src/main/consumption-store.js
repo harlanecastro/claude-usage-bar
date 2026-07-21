@@ -587,6 +587,30 @@ class ConsumptionStore {
     return windows;
   }
 
+  /**
+   * Série DIÁRIA para o dashboard (fonte Local): agrega usage_records por dia
+   * no fuso local do computador (Mac ou Windows — date() com 'localtime'),
+   * separada por modelo para o pricing aplicar o preço certo. "Turno" =
+   * requisição distinta (request_id; registros sem request contam pelo id).
+   */
+  summarizeDaily(days = 30) {
+    const safeDays = Math.min(Math.max(Number(days) || 30, 1), 365);
+    const cutoff = Date.now() - safeDays * DAY_MS;
+    return this.db.prepare(`
+      SELECT date(ended_at / 1000, 'unixepoch', 'localtime') AS day,
+        model,
+        COUNT(DISTINCT COALESCE(request_id, id)) AS turns,
+        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+        COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
+      FROM usage_records
+      WHERE event_kind = 'usage' AND ended_at >= ?
+      GROUP BY day, model
+      ORDER BY day ASC
+    `).all(cutoff);
+  }
+
   listRecords({ startAt, endAt, cursor = null, limit = 500 }) {
     const safeLimit = Math.min(Math.max(Number(limit) || 500, 1), 1000);
     const cursorTime = Number.isFinite(cursor?.endedAt) ? cursor.endedAt : null;

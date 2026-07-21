@@ -138,6 +138,10 @@ function commitRetention() {
 $('retentionDays').addEventListener('change', commitRetention);
 $('retentionSize').addEventListener('change', commitRetention);
 
+// Fonte "VPS" da tela de consumo (API do atendimento; token READ-ONLY basta).
+$('vpsUrl').addEventListener('change', () => push({ vpsUrl: $('vpsUrl').value }));
+$('vpsToken').addEventListener('change', () => push({ vpsToken: $('vpsToken').value }));
+
 /**
  * The corner toggle is a Windows idea: only the taskbar strip reads alignLeft, so
  * on macOS it is a switch that flips and changes nothing, under a hint about a
@@ -265,6 +269,8 @@ function syncControls() {
   $('lang').value = state.settings.language;
   $('retentionDays').value = String(state.settings.consumptionRetention.days);
   $('retentionSize').value = String(state.settings.consumptionRetention.maxMb);
+  $('vpsUrl').value = state.settings.vpsUrl || '';
+  $('vpsToken').value = state.settings.vpsToken || '';
   renderMeters();
   renderMonitors();
   renderAlign();
