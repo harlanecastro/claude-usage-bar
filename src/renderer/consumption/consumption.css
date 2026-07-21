@@ -400,3 +400,8 @@ button, select { font: inherit; }
   font: 600 13px var(--sans); padding: 9px 16px; cursor: pointer;
 }
 .dash-configure-button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* O atributo hidden PRECISA vencer os display das classes (.layout é grid,
+   .window-picker é flex…) — sem isto, a lista de mensagens continuava
+   aparecendo embaixo do dashboard. */
+[hidden] { display: none !important; }
