@@ -804,18 +804,14 @@ ipcMain.handle('consumption:daily', (event, request) => {
     day.costUsd += cost.costUsd;
     day.hypotheticalUsd += cost.hypotheticalUsd;
   }
-  return {
-    series: [...byDay.values()],
-    revampDate: getSettings().cacheRevampDate,
-  };
+  return { series: [...byDay.values()] };
 });
 
 // Dashboard — fonte VPS (consumo real da Sofia via módulo PrestaShop). O fetch
 // vive no MAIN (CSP das telas bloqueia rede no renderer).
 ipcMain.handle('consumption:vps-usage', async (event, request) => {
   if (!validConsumptionSender(event)) throw new Error('Forbidden');
-  const result = await vpsUsage.fetchAiUsage(Number(request?.days) || 30);
-  return { ...result, revampDate: getSettings().cacheRevampDate };
+  return vpsUsage.fetchAiUsage(Number(request?.days) || 30);
 });
 
 ipcMain.handle('consumption:vps-turns', (event, request) => {

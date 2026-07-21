@@ -81,7 +81,7 @@ function renderDashTiles(host, series) {
   host.append(wrap);
 }
 
-function renderDashChart(host, series, revampDate) {
+function renderDashChart(host, series) {
   const section = create('section', 'dash-section');
   section.append(
     create('h2', null, t('dashChartTitle')),
@@ -158,30 +158,10 @@ function renderDashChart(host, series, revampDate) {
     }
     const dayLabel = svgNode('text', {
       x: x + bw / 2, y: height - 9, 'text-anchor': 'middle',
-      fill: day.day === revampDate ? 'var(--accent)' : 'var(--muted)',
-      'font-size': 10, 'font-family': 'var(--mono)',
+      fill: 'var(--muted)', 'font-size': 10, 'font-family': 'var(--mono)',
     });
     dayLabel.textContent = shortDay(day.day);
     svg.append(dayLabel);
-    if (day.day === revampDate) {
-      svg.append(svgNode('line', {
-        x1: x + bw + 2, y1: padT, x2: x + bw + 2, y2: height - padB,
-        stroke: 'var(--accent)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4',
-      }));
-      // Perto da borda direita (ex.: reengenharia no último dia) o rótulo
-      // ancora à ESQUERDA da linha pra não estourar o gráfico.
-      const fitsRight = x + bw + 110 <= width;
-      const mark = svgNode('text', {
-        x: fitsRight ? x + bw + 8 : x + bw - 6,
-        y: padT + 10,
-        fill: 'var(--accent)',
-        'font-size': 10.5,
-        'font-weight': 700,
-        'text-anchor': fitsRight ? 'start' : 'end',
-      });
-      mark.textContent = `⚡ ${t('dashRevamp')}`;
-      svg.append(mark);
-    }
   });
   box.append(svg);
   const legend = create('div', 'dash-legend');
@@ -251,7 +231,7 @@ function renderDashXray(host, series) {
   host.append(section);
 }
 
-function renderDashTable(host, series, revampDate) {
+function renderDashTable(host, series) {
   const section = create('section', 'dash-section');
   section.append(create('h2', null, t('dashSeriesTitle')));
   const box = create('div', 'dash-panel dash-tablebox');
@@ -264,11 +244,7 @@ function renderDashTable(host, series, revampDate) {
   table.append(head);
   for (const day of [...series].reverse()) {
     const row = create('tr');
-    const dayCell = create('td', 'dash-day-cell', shortDay(day.day));
-    if (revampDate && day.day < revampDate) {
-      dayCell.append(create('span', 'dash-badge old', t('dashEraOld')));
-    }
-    row.append(dayCell);
+    row.append(create('td', 'dash-day-cell', shortDay(day.day)));
     row.append(create('td', null, number(day.turns)));
     row.append(create('td', null, compactTokens(day.input)));
     row.append(create('td', null, compactTokens(day.cacheWrite)));
@@ -288,7 +264,7 @@ function renderDashTable(host, series, revampDate) {
 
 /** Ponto de entrada: consumption.js chama com a série normalizada da fonte ativa. */
 // eslint-disable-next-line no-unused-vars
-function renderDashboard(host, series, { revampDate, error, notConfigured } = {}) {
+function renderDashboard(host, series, { error, notConfigured } = {}) {
   host.replaceChildren();
   if (notConfigured) {
     const card = create('div', 'dash-configure');
@@ -312,7 +288,7 @@ function renderDashboard(host, series, { revampDate, error, notConfigured } = {}
     return;
   }
   renderDashTiles(host, series);
-  renderDashChart(host, series, revampDate);
+  renderDashChart(host, series);
   renderDashXray(host, series);
-  renderDashTable(host, series, revampDate);
+  renderDashTable(host, series);
 }

@@ -28,10 +28,10 @@ const fallback = {
   dashChartTitle: 'Consumo diário × economia de cache',
   dashChartSub: 'Barras: tokens ponderados por categoria. Linha pontilhada: o dia SEM cache — a distância até a barra é a economia.',
   dashCacheWrite: 'Cache escrita (1,25×)', dashCacheRead: 'Cache leitura (0,1×)',
-  dashNoCache: 'Sem cache (hipotético)', dashRevamp: 'reengenharia',
+  dashNoCache: 'Sem cache (hipotético)',
   dashXrayTitle: 'Raio-X do cache por dia', dashXraySub: 'Azul = lido a 10%; âmbar = criado a 125%.',
   dashFormulasTitle: 'Como a economia é calculada', dashFormulasSub: 'Transparência das fórmulas exibidas.',
-  dashSeriesTitle: 'Série diária', dashDay: 'Dia', dashCacheCol: 'Cache', dashEraOld: 'era --resume',
+  dashSeriesTitle: 'Série diária', dashDay: 'Dia', dashCacheCol: 'Cache',
   dashConfigureTitle: 'Configure a fonte VPS', dashConfigureHint: 'Informe a URL e o token (somente leitura) da API do atendimento nas Configurações para ver o consumo da Sofia.',
   dashOpenSettings: 'Abrir Configurações', dashError: 'Não foi possível carregar a fonte VPS',
   dashDayUtc: 'dia UTC', vpsTurn: 'turno', vpsTurns: 'turnos', vpsProactive: 'proativo', vpsReactive: 'reativo',
@@ -768,7 +768,7 @@ async function loadDashboard() {
   try {
     if (state.source === 'local') {
       const result = await windowThis.consumptionApi.daily({ days: 30 });
-      showDashboard(result?.series || [], { revampDate: result?.revampDate });
+      showDashboard(result?.series || [], {});
       return;
     }
     const result = await windowThis.consumptionApi.vpsUsage({ days: 30 });
@@ -780,9 +780,7 @@ async function loadDashboard() {
       showDashboard([], { error: result.error });
       return;
     }
-    showDashboard(normalizeVpsSeries(result?.data?.usage), {
-      revampDate: result?.revampDate,
-    });
+    showDashboard(normalizeVpsSeries(result?.data?.usage), {});
   } catch (error) {
     showDashboard([], { error: error.message });
   }
