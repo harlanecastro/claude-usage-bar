@@ -48,11 +48,23 @@ function showTooltip(event, text) {
   tooltip.style.top = `${top}px`;
 }
 
+/* Sem dados/erro: só a mensagem centralizada — sem legenda nem área vazia. */
 function showEmpty(text) {
   empty.textContent = text;
   empty.hidden = false;
+  wrap.hidden = true;
+  legendLocal.hidden = true;
+  legendVps.hidden = true;
   svg.hidden = true;
   svg.replaceChildren();
+}
+
+function showChart() {
+  empty.hidden = true;
+  wrap.hidden = false;
+  svg.hidden = false;
+  legendLocal.hidden = source !== 'local';
+  legendVps.hidden = source !== 'vps';
 }
 
 /**
@@ -62,9 +74,11 @@ function showEmpty(text) {
  */
 function renderScatter(points, axes) {
   svg.replaceChildren();
-  empty.hidden = points.length > 0;
-  svg.hidden = points.length === 0;
-  if (!points.length) return;
+  if (!points.length) {
+    showEmpty(empty.textContent);
+    return;
+  }
+  showChart();
 
   const width = 1100; const height = 650;
   const margin = { top: 34, right: 35, bottom: 75, left: 92 };
@@ -215,8 +229,6 @@ function setSource(next) {
   for (const button of sourceTabs.querySelectorAll('button')) {
     button.classList.toggle('on', button.dataset.source === next);
   }
-  legendLocal.hidden = next !== 'local';
-  legendVps.hidden = next !== 'vps';
   tooltip.hidden = true;
   reload();
 }

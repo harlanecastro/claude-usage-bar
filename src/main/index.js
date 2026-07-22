@@ -810,7 +810,7 @@ ipcMain.handle('consumption:daily', (event, request) => {
 // Dashboard — fonte VPS (consumo real da Sofia via módulo PrestaShop). O fetch
 // vive no MAIN (CSP das telas bloqueia rede no renderer).
 ipcMain.handle('consumption:vps-usage', async (event, request) => {
-  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  if (!validConsumptionSender(event) && !validConsumptionChartSender(event)) throw new Error('Forbidden');
   return vpsUsage.fetchAiUsage(Number(request?.days) || 30);
 });
 
