@@ -700,6 +700,27 @@ refreshButton.addEventListener('click', async () => {
   }
 });
 
+// Dados "de agora": além do botão, a janela se atualiza sozinha enquanto está
+// visível — a cada AUTO_REFRESH_MS e ao ganhar foco. Barato: o ingest local é
+// incremental (mtime/offset no SQLite) e a fonte VPS é 1 GET leve (ai_usage);
+// a seleção de dia do usuário é preservada pelo loadVpsMessages.
+const AUTO_REFRESH_MS = 60_000;
+let autoRefreshBusy = false;
+async function autoRefresh() {
+  if (autoRefreshBusy || document.visibilityState !== 'visible') return;
+  autoRefreshBusy = true;
+  try {
+    if (state.source === 'local') await windowThis.consumptionApi.refresh();
+    if (state.view === 'dashboard') await loadDashboard();
+    else if (state.source === 'vps') await loadVpsMessages();
+    else await reload();
+  } catch { /* transitório — a próxima volta tenta de novo */ } finally {
+    autoRefreshBusy = false;
+  }
+}
+setInterval(() => { void autoRefresh(); }, AUTO_REFRESH_MS);
+windowThis.addEventListener('focus', () => { void autoRefresh(); });
+
 /** Cabeçalho da tabela: a fonte VPS ganha as colunas Cache e Custo. */
 function renderMessageColumns() {
   if (!messageColumns) return;
@@ -714,6 +735,24 @@ function renderMessageColumns() {
 // ---------------------------------------------------------------------------
 // Dashboard (as duas fontes entregam a MESMA série normalizada ao dashboard.js)
 // ---------------------------------------------------------------------------
+
+// O dia UTC corrente SEMPRE presente na série da VPS: a linha de "hoje" só
+// nasce no backend com o 1º turno do dia (cx_ai_usage_daily) — sem isto o app
+// abria "preso" em ontem e nunca oferecia o dia em andamento na linha do tempo.
+function todayUtc() {
+  return new Date().toISOString().slice(0, 10);
+}
+function ensureToday(rows) {
+  const list = Array.isArray(rows) ? [...rows] : [];
+  const today = todayUtc();
+  if (!list.some((row) => String(row.day) === today)) {
+    list.push({
+      day: today, turns: 0, input_tokens: 0, cache_write_tokens: 0,
+      cache_read_tokens: 0, output_tokens: 0, cost_usd: 0,
+    });
+  }
+  return list;
+}
 
 function normalizeVpsSeries(rows) {
   const SONNET_INPUT_PER_TOKEN = 3 / 1e6; // economia derivada do preço de entrada
@@ -779,7 +818,7 @@ async function loadDashboard() {
       showDashboard([], { error: result.error });
       return;
     }
-    showDashboard(normalizeVpsSeries(result?.data?.usage), {});
+    showDashboard(normalizeVpsSeries(ensureToday(result?.data?.usage)), {});
   } catch (error) {
     showDashboard([], { error: error.message });
   }
@@ -895,9 +934,14 @@ async function loadVpsMessages() {
     vpsStateMessage(`${t('dashError')} (${result.error})`);
     return;
   }
-  state.vpsDays = Array.isArray(result?.data?.usage) ? result.data.usage : [];
-  state.vpsSelectedDay = state.vpsDays.length
-    ? state.vpsDays[state.vpsDays.length - 1].day : null;
+  state.vpsDays = ensureToday(result?.data?.usage);
+  // Auto-refresh não pode "roubar" a seleção: mantém o dia que o usuário está
+  // olhando se ele ainda existe; senão, seleciona o mais recente (hoje).
+  const keepSelected = state.vpsSelectedDay
+    && state.vpsDays.some((day) => day.day === state.vpsSelectedDay);
+  state.vpsSelectedDay = keepSelected
+    ? state.vpsSelectedDay
+    : (state.vpsDays.length ? state.vpsDays[state.vpsDays.length - 1].day : null);
   renderVpsDays();
   if (state.vpsSelectedDay) await loadVpsTurns(state.vpsSelectedDay);
   else vpsStateMessage(t('noMessages'));

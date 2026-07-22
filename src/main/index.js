@@ -961,6 +961,12 @@ if (!app.requestSingleInstanceLock()) {
       });
       console.log('[menu]', JSON.stringify(buildMenu().items.map(describe), null, 1));
     }
+
+    // Abre a janela "Detalhes do consumo" direto na largada (teste automatizado
+    // via CDP, sem depender de clique no tray) — mesmo espírito do --dump-menu.
+    if (process.argv.includes('--open-details')) {
+      openConsumptionDetails();
+    }
   });
 
   app.on('before-quit', (event) => {
