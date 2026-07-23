@@ -580,7 +580,9 @@ function appendEvent(host, record) {
     if (bundled) renderIo(ioHost, record);
     else void loadEventContent(record.id, ioHost);
   });
-  details.append(row, eventBreakdown(record), ioHost);
+  // Conteúdo enviado/recebido PRIMEIRO (é o que mais importa ver), depois o quadro
+  // de custo detalhado — antes o conteúdo ficava abaixo do quadro, fora da tela.
+  details.append(row, ioHost, eventBreakdown(record));
   host.append(details);
 }
 
