@@ -176,7 +176,7 @@ button, select { font: inherit; }
 
 .message-columns, .message-summary {
   display: grid;
-  grid-template-columns: 88px minmax(330px, 1fr) 120px 120px 140px 30px;
+  grid-template-columns: 88px minmax(280px, 1fr) 104px 104px 74px 96px 132px 30px;
   align-items: center;
   gap: 10px;
 }
@@ -255,7 +255,7 @@ button, select { font: inherit; }
 
 .event-header, .event {
   display: grid;
-  grid-template-columns: 82px minmax(230px, 1fr) 110px 110px 130px;
+  grid-template-columns: 82px minmax(200px, 1fr) 92px 92px 64px 84px 118px;
   gap: 10px;
   align-items: center;
 }
@@ -298,7 +298,7 @@ button, select { font: inherit; }
   .layout { grid-template-columns: 260px minmax(0, 1fr); }
   .consumption-list { padding: 22px 20px 28px; }
   .message-columns, .message-summary {
-    grid-template-columns: 78px minmax(300px, 1fr) 100px 100px 120px 24px;
+    grid-template-columns: 78px minmax(220px, 1fr) 88px 88px 62px 84px 108px 24px;
   }
   .message-metadata { padding-left: 104px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .event-list { padding-left: 104px; }
@@ -321,8 +321,8 @@ button, select { font: inherit; }
 .message-columns.vps, .message-summary.vps {
   grid-template-columns: 70px minmax(0,1fr) 90px 80px 64px 84px 90px 18px;
 }
-.metric.cache { color: var(--dash-cacheread); }
-.metric.cost { color: var(--accent); }
+.metric.cache, .event > .cache { color: var(--dash-cacheread); }
+.metric.cost, .event > .cost { color: var(--accent); }
 
 /* ---- Dashboard ---- */
 :root {

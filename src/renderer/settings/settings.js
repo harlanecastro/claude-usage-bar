@@ -138,6 +138,19 @@ function commitRetention() {
 $('retentionDays').addEventListener('change', commitRetention);
 $('retentionSize').addEventListener('change', commitRetention);
 
+// Tarifas de custo estimado (US$/MTok), aplicadas a todos os modelos.
+function commitPricing() {
+  push({
+    pricing: {
+      inputPerMTok: Number($('priceInput').value),
+      outputPerMTok: Number($('priceOutput').value),
+    },
+  });
+}
+
+$('priceInput').addEventListener('change', commitPricing);
+$('priceOutput').addEventListener('change', commitPricing);
+
 // Fonte "VPS" da tela de consumo (API do atendimento; token READ-ONLY basta).
 $('vpsUrl').addEventListener('change', () => push({ vpsUrl: $('vpsUrl').value }));
 $('vpsToken').addEventListener('change', () => push({ vpsToken: $('vpsToken').value }));
@@ -269,6 +282,8 @@ function syncControls() {
   $('lang').value = state.settings.language;
   $('retentionDays').value = String(state.settings.consumptionRetention.days);
   $('retentionSize').value = String(state.settings.consumptionRetention.maxMb);
+  $('priceInput').value = String(state.settings.pricing.inputPerMTok);
+  $('priceOutput').value = String(state.settings.pricing.outputPerMTok);
   $('vpsUrl').value = state.settings.vpsUrl || '';
   $('vpsToken').value = state.settings.vpsToken || '';
   renderMeters();

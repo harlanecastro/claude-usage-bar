@@ -104,7 +104,12 @@
     "vps": "Sofia usage (VPS)",
     "vpsHint": "Platform URL and READ-ONLY support token — they enable the \"VPS\" source on the consumption details screen.",
     "vpsUrl": "URL",
-    "vpsToken": "Token (read-only)"
+    "vpsToken": "Token (read-only)",
+    "pricing": "Estimated cost",
+    "pricingHint": "Per-million-token prices used to estimate cost on the consumption details screen. Adjust these if you switch the model in use.",
+    "priceInput": "Input",
+    "priceOutput": "Output",
+    "pricePerMTok": "US$ / Mtok"
   },
   "consumption": {
     "title": "Consumption details",

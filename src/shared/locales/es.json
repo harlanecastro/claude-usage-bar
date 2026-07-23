@@ -104,7 +104,12 @@
     "vps": "Consumo de Sofia (VPS)",
     "vpsHint": "URL de la plataforma y token de SOLO LECTURA — habilitan la fuente \"VPS\" en la pantalla de detalles de consumo.",
     "vpsUrl": "URL",
-    "vpsToken": "Token (solo lectura)"
+    "vpsToken": "Token (solo lectura)",
+    "pricing": "Costo estimado",
+    "pricingHint": "Precios por millón de tokens usados para estimar el costo en la pantalla de detalles de consumo. Ajústalos si cambias el modelo en uso.",
+    "priceInput": "Entrada",
+    "priceOutput": "Salida",
+    "pricePerMTok": "US$ / Mtok"
   },
   "consumption": {
     "title": "Detalles del consumo",

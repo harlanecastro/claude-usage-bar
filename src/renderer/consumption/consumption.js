@@ -46,6 +46,9 @@ const state = {
   // A tela SEMPRE abre no Dashboard; só a FONTE é lembrada entre aberturas.
   source: 'local',
   view: 'dashboard',
+  // Tarifas de custo estimado (US$/MTok) — chegam do main via overview; este é o
+  // fallback até a 1ª carga. Usadas na economia de cache da série VPS.
+  pricing: { inputPerMTok: 15, outputPerMTok: 75 },
   vpsDays: [],
   vpsSelectedDay: null,
   windows: [],
@@ -123,6 +126,11 @@ function time(value, seconds = false) {
   return formatters()[seconds ? 'timeSeconds' : 'time'].format(new Date(value));
 }
 
+function usd(value) {
+  return new Intl.NumberFormat(state.locale,
+    { style: 'currency', currency: 'USD', maximumFractionDigits: 3 }).format(Number(value) || 0);
+}
+
 function dateTime(value) {
   return formatters().dateTime.format(new Date(value));
 }
@@ -191,6 +199,10 @@ function groupRecords(records) {
         endedAt: record.endedAt,
         inputTokens: 0,
         outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        costUsd: 0,
+        priced: false,
         records: [],
         agents: new Set(),
         projects: new Set(),
@@ -205,6 +217,10 @@ function groupRecords(records) {
     group.endedAt = Math.max(group.endedAt, record.endedAt);
     group.inputTokens += Number(record.inputTokens) || 0;
     group.outputTokens += Number(record.outputTokens) || 0;
+    group.cacheReadTokens += Number(record.cacheReadTokens) || 0;
+    group.cacheCreationTokens += Number(record.cacheCreationTokens) || 0;
+    group.costUsd += Number(record.costUsd) || 0;
+    if (record.priced) group.priced = true;
     group.records.push(record);
     group.agents.add(agentName(record));
     if (record.projectName) group.projects.add(record.projectName);
@@ -359,11 +375,18 @@ function appendEvent(host, record) {
   appendIdentifier(copy, t('recordId'), record.id);
   appendIdentifier(copy, t('errorCode'), record.errorCode);
   appendIdentifier(copy, t('httpStatus'), record.errorStatus);
+  const cachedInput = (Number(record.cacheReadTokens) || 0) + (Number(record.cacheCreationTokens) || 0);
+  const cacheShare = Math.round(100 * (Number(record.cacheReadTokens) || 0)
+    / Math.max(1, cachedInput + (Number(record.inputTokens) || 0)));
+  const cost = create('span', 'cost', record.priced ? usd(record.costUsd) : '—');
+  if (record.priced) cost.title = t('dashEstimated');
   row.append(
     create('span', null, time(record.endedAt, true)),
     copy,
     create('span', null, number(record.inputTokens)),
     create('span', null, number(record.outputTokens)),
+    create('span', 'cache', cachedInput ? `${cacheShare}%` : '—'),
+    cost,
     create('span', 'event-total', number(recordTotal(record))),
   );
   host.append(row);
@@ -391,11 +414,18 @@ function appendMessageGroup(group) {
   const error = group.records.find((record) => record.eventKind === 'error');
   if (error) copy.append(create('small', 'status-error', error.statusText || t('apiError')));
 
+  const cachedInput = group.cacheReadTokens + group.cacheCreationTokens;
+  const cacheShare = Math.round(100 * group.cacheReadTokens
+    / Math.max(1, cachedInput + group.inputTokens));
+  const costCell = create('span', 'metric cost', group.priced ? usd(group.costUsd) : '—');
+  if (group.priced) costCell.title = t('dashEstimated');
   summary.append(
     create('span', 'message-time', time(group.endedAt, true)),
     copy,
     create('span', 'metric', number(group.inputTokens)),
     create('span', 'metric', number(group.outputTokens)),
+    create('span', 'metric cache', cachedInput ? `${cacheShare}%` : '—'),
+    costCell,
     create('span', 'metric total', number(group.totalTokens)),
     create('span', 'chevron', '›'),
   );
@@ -409,7 +439,7 @@ function appendMessageGroup(group) {
 
   const events = create('div', 'event-list');
   const header = create('div', 'event-header');
-  for (const label of [t('time'), t('event'), t('input'), t('output'), t('total')]) {
+  for (const label of [t('time'), t('event'), t('input'), t('output'), t('cache'), t('cost'), t('total')]) {
     header.append(create('span', null, label));
   }
   events.append(header);
@@ -556,6 +586,7 @@ async function reload() {
     if (overview?.error) throw new Error(overview.error);
     state.strings = { ...fallback, ...(overview?.strings || {}) };
     state.locale = overview?.locale || 'pt-BR';
+    state.pricing = overview?.pricing || state.pricing;
     state.windows = Array.isArray(overview?.windows) ? overview.windows : [];
     applyStrings();
     if (isLocalMessages()) {
@@ -721,14 +752,12 @@ async function autoRefresh() {
 setInterval(() => { void autoRefresh(); }, AUTO_REFRESH_MS);
 windowThis.addEventListener('focus', () => { void autoRefresh(); });
 
-/** Cabeçalho da tabela: a fonte VPS ganha as colunas Cache e Custo. */
+/** Cabeçalho da tabela: Local e VPS exibem as colunas Cache e Custo. */
 function renderMessageColumns() {
   if (!messageColumns) return;
   messageColumns.classList.toggle('vps', state.source === 'vps');
   messageColumns.replaceChildren();
-  const labels = state.source === 'vps'
-    ? [t('time'), t('message'), t('input'), t('output'), t('cache'), t('cost'), t('total'), '']
-    : [t('time'), t('message'), t('input'), t('output'), t('total'), ''];
+  const labels = [t('time'), t('message'), t('input'), t('output'), t('cache'), t('cost'), t('total'), ''];
   for (const label of labels) messageColumns.append(create('span', null, label));
 }
 
@@ -755,7 +784,10 @@ function ensureToday(rows) {
 }
 
 function normalizeVpsSeries(rows) {
-  const SONNET_INPUT_PER_TOKEN = 3 / 1e6; // economia derivada do preço de entrada
+  // Economia de cache: cada token lido do cache custou 0,1× o preço de entrada em
+  // vez de 1×, então 0,9× a tarifa de entrada configurada é o que se poupou — sem
+  // preço amarrado a modelo (o usuário ajusta em Configurações se trocar de modelo).
+  const inputPerToken = (Number(state.pricing?.inputPerMTok) || 0) / 1e6;
   return (Array.isArray(rows) ? rows : []).map((row) => {
     const cacheRead = Number(row.cache_read_tokens) || 0;
     const costUsd = Number(row.cost_usd) || 0;
@@ -767,7 +799,7 @@ function normalizeVpsSeries(rows) {
       cacheRead,
       output: Number(row.output_tokens) || 0,
       costUsd,
-      hypotheticalUsd: costUsd + cacheRead * 0.9 * SONNET_INPUT_PER_TOKEN,
+      hypotheticalUsd: costUsd + cacheRead * 0.9 * inputPerToken,
       estimated: false,
     };
   });
@@ -883,9 +915,7 @@ function vpsTurnRow(turn) {
       + usage.cache_read_input_tokens) : '—'),
     create('span', 'metric', usage ? number(usage.output_tokens) : '—'),
     create('span', 'metric cache', cacheShare == null ? '—' : `${cacheShare}%`),
-    create('span', 'metric cost', turn.total_cost_usd == null ? '—'
-      : new Intl.NumberFormat(state.locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 3 })
-        .format(turn.total_cost_usd)),
+    create('span', 'metric cost', turn.total_cost_usd == null ? '—' : usd(turn.total_cost_usd)),
     create('span', 'metric total', usage ? number(usage.input_tokens + usage.cache_creation_input_tokens
       + usage.cache_read_input_tokens + usage.output_tokens) : '—'),
     create('span', 'chevron', '›'),

@@ -111,6 +111,23 @@
     <hr class="rule">
 
     <section class="field">
+      <span class="field-label" data-i18n="settings.pricing"></span>
+      <p class="field-hint" data-i18n="settings.pricingHint"></p>
+      <div class="retention-grid">
+        <label>
+          <span data-i18n="settings.priceInput"></span>
+          <span class="number-input"><input id="priceInput" type="number" min="0" max="100000" step="0.01"><b data-i18n="settings.pricePerMTok"></b></span>
+        </label>
+        <label>
+          <span data-i18n="settings.priceOutput"></span>
+          <span class="number-input"><input id="priceOutput" type="number" min="0" max="100000" step="0.01"><b data-i18n="settings.pricePerMTok"></b></span>
+        </label>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section class="field">
       <span class="field-label" data-i18n="settings.vps"></span>
       <p class="field-hint" data-i18n="settings.vpsHint"></p>
       <div class="retention-grid">

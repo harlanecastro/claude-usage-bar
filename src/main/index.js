@@ -733,6 +733,7 @@ ipcMain.handle('consumption:overview', (event) => {
   return {
     windows,
     retention: settings.consumptionRetention,
+    pricing: settings.pricing,
     locale: resolveLanguage(settings.language),
     strings: translator().dict.consumption,
     error: null,
@@ -765,7 +766,21 @@ ipcMain.handle('consumption:records', (event, request) => {
     }
     cursor = { endedAt, id };
   }
-  return consumptionStore.listRecords({ startAt, endAt, cursor, limit: request?.limit });
+  // Custo "estimado" por registro (tarifas de entrada/saída das Configurações) —
+  // o transcript local não traz valor em dólar, só tokens; a UI rotula estimado.
+  const page = consumptionStore.listRecords({ startAt, endAt, cursor, limit: request?.limit });
+  const rates = getSettings().pricing;
+  for (const record of page.records) {
+    const { costUsd, priced } = pricing.costFor(rates, {
+      inputTokens: record.inputTokens,
+      outputTokens: record.outputTokens,
+      cacheReadTokens: record.cacheReadTokens,
+      cacheCreationTokens: record.cacheCreationTokens,
+    });
+    record.costUsd = costUsd;
+    record.priced = priced;
+  }
+  return page;
 });
 
 ipcMain.handle('consumption:refresh', async (event) => {
@@ -775,11 +790,12 @@ ipcMain.handle('consumption:refresh', async (event) => {
 });
 
 // Dashboard — série DIÁRIA local: agrega o SQLite por dia (fuso do computador)
-// e aplica o pricing estático por modelo (custo "estimado", rotulado na UI).
+// e aplica as tarifas configuradas (custo "estimado", rotulado na UI).
 ipcMain.handle('consumption:daily', (event, request) => {
   if (!validConsumptionSender(event)) throw new Error('Forbidden');
   if (!consumptionStore) throw new Error(consumptionError || 'ConsumptionStoreUnavailable');
   const rows = consumptionStore.summarizeDaily(Number(request?.days) || 30);
+  const rates = getSettings().pricing;
   const byDay = new Map();
   for (const row of rows) {
     let day = byDay.get(row.day);
@@ -795,7 +811,7 @@ ipcMain.handle('consumption:daily', (event, request) => {
     day.cacheWrite += row.cache_creation_tokens;
     day.cacheRead += row.cache_read_tokens;
     day.output += row.output_tokens;
-    const cost = pricing.costFor(row.model, {
+    const cost = pricing.costFor(rates, {
       inputTokens: row.input_tokens,
       outputTokens: row.output_tokens,
       cacheReadTokens: row.cache_read_tokens,

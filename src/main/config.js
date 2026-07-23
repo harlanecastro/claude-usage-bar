@@ -18,6 +18,11 @@ const DEFAULTS = {
   // handles normal rotation, while the size ceiling protects unusually busy
   // installations from growing without bound.
   consumptionRetention: { days: 30, maxMb: 100 },
+  // Preços (USD por milhão de tokens) usados para ESTIMAR o custo na tela de
+  // consumo — o transcript local só traz tokens, não valor. Um único preço de
+  // entrada e um de saída, aplicados a todos os modelos; o padrão é o Opus
+  // (15/75) e o usuário ajusta se trocar de modelo.
+  pricing: { inputPerMTok: 15, outputPerMTok: 75 },
   // Fonte "VPS" da tela de consumo: a API do módulo PrestaShop que agrega o
   // consumo REAL da Sofia (action=ai_usage / ai_turns). Token READ-ONLY basta.
   vpsUrl: '',
@@ -39,6 +44,7 @@ function getSettings() {
     alignLeft: store.get('alignLeft', DEFAULTS.alignLeft),
     consumptionRetention: normalizeRetention(store.get(
       'consumptionRetention', DEFAULTS.consumptionRetention)),
+    pricing: normalizePricing(store.get('pricing', DEFAULTS.pricing)),
     vpsUrl: normalizeVpsUrl(store.get('vpsUrl', DEFAULTS.vpsUrl)),
     vpsToken: String(store.get('vpsToken', DEFAULTS.vpsToken) || '').trim(),
   };
@@ -68,6 +74,19 @@ function normalizeThresholds(warn, crit) {
   return { warn: w, crit: c };
 }
 
+/** Preços ≥ 0 (USD/MTok), com teto sensato; inválido cai no padrão. */
+function normalizePricing(value) {
+  const raw = value && typeof value === 'object' ? value : DEFAULTS.pricing;
+  const clamp = (n, fallback) => {
+    const num = Number(n);
+    return Number.isFinite(num) && num >= 0 ? Math.min(num, 100000) : fallback;
+  };
+  return {
+    inputPerMTok: clamp(raw.inputPerMTok, DEFAULTS.pricing.inputPerMTok),
+    outputPerMTok: clamp(raw.outputPerMTok, DEFAULTS.pricing.outputPerMTok),
+  };
+}
+
 function normalizeRetention(value) {
   const raw = value && typeof value === 'object' ? value : DEFAULTS.consumptionRetention;
   const days = Number.isFinite(Number(raw.days)) ? Math.round(Number(raw.days)) : DEFAULTS.consumptionRetention.days;
@@ -92,11 +111,12 @@ function setSettings(patch) {
   if (patch.consumptionRetention !== undefined) {
     store.set('consumptionRetention', normalizeRetention(patch.consumptionRetention));
   }
+  if (patch.pricing !== undefined) store.set('pricing', normalizePricing(patch.pricing));
   if (patch.vpsUrl !== undefined) store.set('vpsUrl', normalizeVpsUrl(patch.vpsUrl));
   if (patch.vpsToken !== undefined) store.set('vpsToken', String(patch.vpsToken || '').trim());
   return getSettings();
 }
 
 module.exports = {
-  store, getSettings, setSettings, normalizeThresholds, normalizeMeters, normalizeRetention, DEFAULTS,
+  store, getSettings, setSettings, normalizeThresholds, normalizeMeters, normalizeRetention, normalizePricing, DEFAULTS,
 };
