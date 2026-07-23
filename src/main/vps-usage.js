@@ -60,4 +60,10 @@ function fetchAiTurns(day) {
   return request('ai_turns', { day: safeDay });
 }
 
-module.exports = { fetchAiUsage, fetchAiTurns };
+function fetchAiTurnDetail(idQueue) {
+  const id = Number(idQueue);
+  if (!Number.isInteger(id) || id <= 0) return Promise.resolve({ error: 'bad_id' });
+  return request('ai_turn_detail', { id_queue: id });
+}
+
+module.exports = { fetchAiUsage, fetchAiTurns, fetchAiTurnDetail };

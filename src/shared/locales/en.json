@@ -109,7 +109,9 @@
     "pricingHint": "Per-million-token prices used to estimate cost on the consumption details screen. Adjust these if you switch the model in use.",
     "priceInput": "Input",
     "priceOutput": "Output",
-    "pricePerMTok": "US$ / Mtok"
+    "pricePerMTok": "US$ / Mtok",
+    "priceCacheWrite": "Cache (write)",
+    "priceCacheRead": "Cache (read)"
   },
   "consumption": {
     "title": "Consumption details",
@@ -176,6 +178,21 @@
     "depth": "Depth",
     "toolUseId": "Tool ID",
     "description": "Description",
-    "iterations": "Iterations"
+    "iterations": "Iterations",
+    "cacheWrite": "Cache write",
+    "costBreakdown": "Cost breakdown · tokens · price US$/Mtok",
+    "sent": "Sent (input)",
+    "received": "Received (output)",
+    "ioText": "Text",
+    "ioThinking": "Thinking",
+    "ioToolUse": "Tool",
+    "ioToolResult": "Tool result",
+    "ioTruncated": "content truncated",
+    "ioUnavailable": "Could not load this event’s content.",
+    "ioSentEmpty": "Nothing new entered this turn — the context came from cache.",
+    "ioReceivedEmpty": "No response content.",
+    "vpsRealCost": "Actual cost",
+    "vpsDetailUnavailable": "Detail unavailable — old session or expired transcript (~7 days).",
+    "vpsTurnDetailError": "Could not load this turn’s detail."
   }
 }

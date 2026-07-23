@@ -19,10 +19,12 @@ const DEFAULTS = {
   // installations from growing without bound.
   consumptionRetention: { days: 30, maxMb: 100 },
   // Preços (USD por milhão de tokens) usados para ESTIMAR o custo na tela de
-  // consumo — o transcript local só traz tokens, não valor. Um único preço de
-  // entrada e um de saída, aplicados a todos os modelos; o padrão é o Opus
-  // (15/75) e o usuário ajusta se trocar de modelo.
-  pricing: { inputPerMTok: 15, outputPerMTok: 75 },
+  // consumo — o transcript local só traz tokens, não valor. Entrada, saída e os
+  // dois preços de prompt caching (escrita/leitura), aplicados a todos os
+  // modelos; o padrão é o Opus e o usuário ajusta se trocar de modelo.
+  pricing: {
+    inputPerMTok: 15, outputPerMTok: 75, cacheWritePerMTok: 18.75, cacheReadPerMTok: 1.5,
+  },
   // Fonte "VPS" da tela de consumo: a API do módulo PrestaShop que agrega o
   // consumo REAL da Sofia (action=ai_usage / ai_turns). Token READ-ONLY basta.
   vpsUrl: '',
@@ -84,6 +86,8 @@ function normalizePricing(value) {
   return {
     inputPerMTok: clamp(raw.inputPerMTok, DEFAULTS.pricing.inputPerMTok),
     outputPerMTok: clamp(raw.outputPerMTok, DEFAULTS.pricing.outputPerMTok),
+    cacheWritePerMTok: clamp(raw.cacheWritePerMTok, DEFAULTS.pricing.cacheWritePerMTok),
+    cacheReadPerMTok: clamp(raw.cacheReadPerMTok, DEFAULTS.pricing.cacheReadPerMTok),
   };
 }
 

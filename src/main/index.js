@@ -13,6 +13,25 @@ const { Widget, IS_MAC } = require('./widget');
 const { ConsumptionStore } = require('./consumption-store');
 const { ConsumptionService } = require('./consumption-service');
 const pricing = require('./pricing');
+const { readEventContent } = require('./event-content');
+
+// Carimba as 4 parcelas de custo + total num objeto (registro local OU turno/evento
+// VPS) a partir dos seus tokens e das tarifas configuradas — para a UI de custo
+// detalhada funcionar igual nas duas fontes. `tokens` já em nomes record-shaped.
+function stampCost(target, tokens, rates) {
+  const cost = pricing.costFor(rates, {
+    inputTokens: tokens.inputTokens,
+    outputTokens: tokens.outputTokens,
+    cacheReadTokens: tokens.cacheReadTokens,
+    cacheCreationTokens: tokens.cacheCreationTokens,
+  });
+  target.costUsd = cost.costUsd;
+  target.inputUsd = cost.inputUsd;
+  target.outputUsd = cost.outputUsd;
+  target.cacheWriteUsd = cost.cacheWriteUsd;
+  target.cacheReadUsd = cost.cacheReadUsd;
+  target.priced = cost.priced;
+}
 const vpsUsage = require('./vps-usage');
 
 // NOTE: do not add app.disableHardwareAcceleration() here. With the GPU off,
@@ -770,16 +789,7 @@ ipcMain.handle('consumption:records', (event, request) => {
   // o transcript local não traz valor em dólar, só tokens; a UI rotula estimado.
   const page = consumptionStore.listRecords({ startAt, endAt, cursor, limit: request?.limit });
   const rates = getSettings().pricing;
-  for (const record of page.records) {
-    const { costUsd, priced } = pricing.costFor(rates, {
-      inputTokens: record.inputTokens,
-      outputTokens: record.outputTokens,
-      cacheReadTokens: record.cacheReadTokens,
-      cacheCreationTokens: record.cacheCreationTokens,
-    });
-    record.costUsd = costUsd;
-    record.priced = priced;
-  }
+  for (const record of page.records) stampCost(record, record, rates);
   return page;
 });
 
@@ -787,6 +797,19 @@ ipcMain.handle('consumption:refresh', async (event) => {
   if (!validConsumptionSender(event)) throw new Error('Forbidden');
   if (!consumptionIngest) return { changed: 0 };
   return consumptionIngest.scan();
+});
+
+// Conteúdo real de um evento (enviado/recebido) — lido sob demanda do transcript.
+ipcMain.handle('consumption:event-content', (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  if (!consumptionStore) throw new Error(consumptionError || 'ConsumptionStoreUnavailable');
+  const location = consumptionStore.getRecordLocation(request?.id);
+  if (!location) return { error: 'not_found' };
+  return readEventContent({
+    sourcePath: location.source_path,
+    firstUuid: location.first_uuid,
+    lastUuid: location.last_uuid,
+  });
 });
 
 // Dashboard — série DIÁRIA local: agrega o SQLite por dia (fuso do computador)
@@ -830,9 +853,57 @@ ipcMain.handle('consumption:vps-usage', async (event, request) => {
   return vpsUsage.fetchAiUsage(Number(request?.days) || 30);
 });
 
-ipcMain.handle('consumption:vps-turns', (event, request) => {
+ipcMain.handle('consumption:vps-turns', async (event, request) => {
   if (!validConsumptionSender(event)) throw new Error('Forbidden');
-  return vpsUsage.fetchAiTurns(request?.day);
+  const result = await vpsUsage.fetchAiTurns(request?.day);
+  // Carimba as parcelas de custo (estimadas, mesmas tarifas do Local) em cada turno
+  // a partir dos tokens que o ai_turns já traz — para a barra de composição e o
+  // quadro de custo detalhado funcionarem na VPS reusando os helpers do Local.
+  const turns = result?.data?.turns;
+  if (Array.isArray(turns)) {
+    const rates = getSettings().pricing;
+    for (const turn of turns) {
+      const usage = turn.usage;
+      if (!usage) continue;
+      turn.inputTokens = Number(usage.input_tokens) || 0;
+      turn.outputTokens = Number(usage.output_tokens) || 0;
+      turn.cacheReadTokens = Number(usage.cache_read_input_tokens) || 0;
+      turn.cacheCreationTokens = Number(usage.cache_creation_input_tokens) || 0;
+      stampCost(turn, turn, rates);
+    }
+  }
+  return result;
+});
+
+// Detalhe de um turno VPS: os eventos (chamadas à API) já vêm com usage + conteúdo
+// do wrapper (via módulo); aqui só carimbamos o custo estimado por evento e damos
+// forma record-shaped pra UI reusar appendEvent/eventBreakdown/renderIo do Local.
+ipcMain.handle('consumption:vps-turn-detail', async (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  const result = await vpsUsage.fetchAiTurnDetail(request?.id_queue);
+  if (!result || result.error) return result || { error: 'unknown' };
+  const rawEvents = Array.isArray(result.events) ? result.events : [];
+  const rates = getSettings().pricing;
+  const events = rawEvents.map((ev) => {
+    const usage = ev.usage || {};
+    const output = Array.isArray(ev.output) ? ev.output : [];
+    const record = {
+      messageId: ev.message_id || null,
+      endedAt: ev.ts ? Date.parse(ev.ts) : null,
+      inputTokens: Number(usage.input_tokens) || 0,
+      outputTokens: Number(usage.output_tokens) || 0,
+      cacheReadTokens: Number(usage.cache_read_input_tokens) || 0,
+      cacheCreationTokens: Number(usage.cache_creation_input_tokens) || 0,
+      // Rótulo do evento (activityFor): ferramentas usadas + tipos de conteúdo.
+      toolNames: output.filter((b) => b.kind === 'tool_use').map((b) => b.name).filter(Boolean),
+      contentKinds: [...new Set(output.map((b) => b.kind))],
+      input: Array.isArray(ev.input) ? ev.input : [],
+      output,
+    };
+    stampCost(record, record, rates);
+    return record;
+  });
+  return { events };
 });
 
 // Card "Configure a VPS" da tela de consumo abre as Configurações.

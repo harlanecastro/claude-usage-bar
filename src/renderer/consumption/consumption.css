@@ -324,6 +324,68 @@ button, select { font: inherit; }
 .metric.cache, .event > .cache { color: var(--dash-cacheread); }
 .metric.cost, .event > .cost { color: var(--accent); }
 
+/* Custo por componente: célula = valor + barra de composição (entrada · saída ·
+   cache escrita · cache leitura), nos dois níveis (mensagem e evento). */
+.cost-value { display: block; }
+.cost-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.cost-bar > i { display: block; height: 100%; }
+.cost-in { background: var(--dash-input); }
+.cost-out { background: var(--dash-good); }
+.cost-cw { background: var(--dash-cachewrite); }
+.cost-cr { background: var(--dash-cacheread); }
+
+/* Evento expansível: a linha vira <summary>; ao abrir mostra o custo detalhado. */
+.event-item { display: block; }
+summary.event { cursor: pointer; list-style: none; }
+summary.event::-webkit-details-marker { display: none; }
+.event-caret { display: inline-block; margin-left: 6px; color: var(--muted); transition: transform .15s ease; }
+.event-item[open] .event-caret { transform: rotate(90deg); }
+.event-item[open] > summary.event { background: var(--surface); }
+
+.event-breakdown {
+  padding: 8px 0 12px 92px;
+  border-top: 1px dashed var(--border);
+  font: 12px var(--mono);
+}
+.event-breakdown-title {
+  color: var(--muted); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: 6px;
+}
+.breakdown-row {
+  display: grid;
+  grid-template-columns: 140px 92px 92px 100px;
+  gap: 10px; padding: 5px 0; border-top: 1px solid var(--border);
+}
+.breakdown-row:first-of-type { border-top: 0; }
+.breakdown-row.total { border-top: 1px solid var(--muted); }
+.breakdown-name { display: flex; align-items: center; }
+.breakdown-total-label { color: var(--text); }
+.breakdown-num { text-align: right; }
+.breakdown-num.cost { color: var(--accent); font-weight: 700; }
+.cost-dot { width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; flex: 0 0 auto; }
+
+/* Conteúdo real do evento: o que foi enviado (input) e recebido (output). */
+.event-io { padding: 4px 16px 14px 92px; }
+.io-state, .io-empty { color: var(--muted); font: 12px var(--mono); padding: 8px 0; }
+.io-section { margin-top: 12px; }
+.io-title {
+  font: 10px var(--mono); text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.io-sent .io-title { color: var(--dash-input); border-color: color-mix(in srgb, var(--dash-input) 40%, var(--border)); }
+.io-received .io-title { color: var(--dash-good); border-color: color-mix(in srgb, var(--dash-good) 40%, var(--border)); }
+.io-block { margin: 8px 0; }
+.io-block-label { font: 10px var(--mono); color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+.io-pre {
+  margin: 0; padding: 9px 11px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; font: 12px/1.5 var(--mono); color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto;
+}
+
+/* Turno VPS expandido: quadro de custo (estimado) + nota real vs estimado. */
+.vps-turn-body { padding: 6px 16px 12px; }
+.vps-cost-note { padding: 8px 0 2px 92px; font: 11px var(--mono); color: var(--muted); }
+
 /* ---- Dashboard ---- */
 :root {
   --dash-cacheread: #4d8fd1;

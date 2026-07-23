@@ -683,6 +683,14 @@ class ConsumptionStore {
     };
   }
 
+  // Onde o conteúdo de um evento vive no transcript — usado para reabri-lo sob
+  // demanda (o que foi enviado/recebido da API) sem guardar o conteúdo no banco.
+  getRecordLocation(id) {
+    return this.db.prepare(
+      'SELECT source_path, first_uuid, last_uuid FROM usage_records WHERE id = ?',
+    ).get(String(id || ''));
+  }
+
   databaseSize() {
     return [this.dbPath, `${this.dbPath}-wal`, `${this.dbPath}-shm`]
       .reduce((total, file) => {

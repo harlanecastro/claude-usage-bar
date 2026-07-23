@@ -109,7 +109,9 @@
     "pricingHint": "Precios por millón de tokens usados para estimar el costo en la pantalla de detalles de consumo. Ajústalos si cambias el modelo en uso.",
     "priceInput": "Entrada",
     "priceOutput": "Salida",
-    "pricePerMTok": "US$ / Mtok"
+    "pricePerMTok": "US$ / Mtok",
+    "priceCacheWrite": "Caché (escritura)",
+    "priceCacheRead": "Caché (lectura)"
   },
   "consumption": {
     "title": "Detalles del consumo",
@@ -128,7 +130,7 @@
     "input": "Entrada",
     "output": "Salida",
     "cacheCreated": "Caché creado",
-    "cacheRead": "Caché leído",
+    "cacheRead": "Caché lectura",
     "total": "Total",
     "totalInputOutput": "Total de entrada + salida",
     "inputOutputSummary": "entrada y salida sumadas por mensaje",
@@ -176,6 +178,21 @@
     "depth": "Profundidad",
     "toolUseId": "ID de herramienta",
     "description": "Descripción",
-    "iterations": "Iteraciones"
+    "iterations": "Iteraciones",
+    "cacheWrite": "Caché escritura",
+    "costBreakdown": "Costo detallado · tokens · precio US$/Mtok",
+    "sent": "Enviado (input)",
+    "received": "Recibido (output)",
+    "ioText": "Texto",
+    "ioThinking": "Razonamiento",
+    "ioToolUse": "Herramienta",
+    "ioToolResult": "Resultado de la herramienta",
+    "ioTruncated": "contenido truncado",
+    "ioUnavailable": "No se pudo cargar el contenido de este evento.",
+    "ioSentEmpty": "Nada nuevo entró en este turno — el contexto vino del caché.",
+    "ioReceivedEmpty": "Sin contenido de respuesta.",
+    "vpsRealCost": "Costo real",
+    "vpsDetailUnavailable": "Detalle no disponible — sesión antigua o transcript expirado (~7 días).",
+    "vpsTurnDetailError": "No se pudo cargar el detalle de este turno."
   }
 }

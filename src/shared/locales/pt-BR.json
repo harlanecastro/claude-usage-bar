@@ -109,7 +109,9 @@
     "pricingHint": "Preços por milhão de tokens usados para estimar o custo na tela Detalhes do consumo. Ajuste se trocar o modelo em uso.",
     "priceInput": "Entrada",
     "priceOutput": "Saída",
-    "pricePerMTok": "US$ / Mtok"
+    "pricePerMTok": "US$ / Mtok",
+    "priceCacheWrite": "Cache (escrita)",
+    "priceCacheRead": "Cache (leitura)"
   },
   "consumption": {
     "title": "Detalhes do consumo",
@@ -128,7 +130,7 @@
     "input": "Entrada",
     "output": "Saída",
     "cacheCreated": "Cache criado",
-    "cacheRead": "Cache lido",
+    "cacheRead": "Cache leitura",
     "total": "Total",
     "totalInputOutput": "Total de entrada + saída",
     "inputOutputSummary": "entrada e saída somadas por mensagem",
@@ -212,6 +214,21 @@
     "vpsProactive": "proativo",
     "vpsReactive": "reativo",
     "vpsNoData": "Conexão OK, mas ainda não há dados: a série diária da Sofia começa a acumular quando o atendimento estiver ligado.",
-    "refresh": "Recarregar"
+    "refresh": "Recarregar",
+    "cacheWrite": "Cache escrita",
+    "costBreakdown": "Custo detalhado · tokens · preço US$/Mtok",
+    "sent": "Enviado (input)",
+    "received": "Recebido (output)",
+    "ioText": "Texto",
+    "ioThinking": "Raciocínio",
+    "ioToolUse": "Ferramenta",
+    "ioToolResult": "Resultado da ferramenta",
+    "ioTruncated": "conteúdo truncado",
+    "ioUnavailable": "Não foi possível carregar o conteúdo deste evento.",
+    "ioSentEmpty": "Nada novo entrou neste turno — o contexto veio do cache.",
+    "ioReceivedEmpty": "Sem conteúdo de resposta.",
+    "vpsRealCost": "Custo real",
+    "vpsDetailUnavailable": "Detalhe indisponível — sessão antiga ou transcript expirado (~7 dias).",
+    "vpsTurnDetailError": "Não foi possível carregar o detalhe deste turno."
   }
 }

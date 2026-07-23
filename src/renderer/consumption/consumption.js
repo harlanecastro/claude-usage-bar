@@ -21,7 +21,15 @@ const fallback = {
   project: 'Projeto', branch: 'Branch', model: 'Modelo', depth: 'Profundidade',
   sessionId: 'Sessão', requestId: 'Requisição', messageId: 'Mensagem', recordId: 'Registro',
   sourceLocal: 'Local', sourceVps: 'VPS', viewDashboard: 'Dashboard', viewMessages: 'Mensagens',
-  cache: 'Cache', cost: 'Custo', dashTurns: 'Turnos', dashWeighted: 'Tokens (ponderado)',
+  cache: 'Cache', cost: 'Custo', cacheWrite: 'Cache escrita', cacheRead: 'Cache leitura',
+  costBreakdown: 'Custo detalhado · tokens · preço US$/Mtok',
+  sent: 'Enviado (input)', received: 'Recebido (output)',
+  ioText: 'Texto', ioThinking: 'Raciocínio', ioToolUse: 'Ferramenta',
+  ioToolResult: 'Resultado da ferramenta', ioTruncated: 'conteúdo truncado',
+  ioUnavailable: 'Não foi possível carregar o conteúdo deste evento.',
+  ioSentEmpty: 'Nada novo entrou neste turno — o contexto veio do cache.',
+  ioReceivedEmpty: 'Sem conteúdo de resposta.',
+  dashTurns: 'Turnos', dashWeighted: 'Tokens (ponderado)',
   dashCost: 'Custo', dashCostDay: 'no dia', dashEstimated: 'estimado',
   dashSavings: 'Economia de cache', dashSavingsHint: 'lido a 10% em vez do preço cheio',
   dashCacheShare: 'Cache aproveitado', dashCacheShareHint: 'do contexto veio quente',
@@ -34,6 +42,9 @@ const fallback = {
   dashConfigureTitle: 'Configure a fonte VPS', dashConfigureHint: 'Informe a URL e o token (somente leitura) da API do atendimento nas Configurações para ver o consumo da Sofia.',
   dashOpenSettings: 'Abrir Configurações', dashError: 'Não foi possível carregar a fonte VPS',
   dashDayUtc: 'dia UTC', vpsTurn: 'turno', vpsTurns: 'turnos', vpsProactive: 'proativo', vpsReactive: 'reativo',
+  vpsRealCost: 'Custo real',
+  vpsDetailUnavailable: 'Detalhe indisponível — sessão antiga ou transcript expirado (~7 dias).',
+  vpsTurnDetailError: 'Não foi possível carregar o detalhe deste turno.',
   vpsNoData: 'Conexão OK, mas ainda não há dados: a série diária da Sofia começa a acumular quando o atendimento estiver ligado.',
   refresh: 'Recarregar',
 };
@@ -48,7 +59,9 @@ const state = {
   view: 'dashboard',
   // Tarifas de custo estimado (US$/MTok) — chegam do main via overview; este é o
   // fallback até a 1ª carga. Usadas na economia de cache da série VPS.
-  pricing: { inputPerMTok: 15, outputPerMTok: 75 },
+  pricing: {
+    inputPerMTok: 15, outputPerMTok: 75, cacheWritePerMTok: 18.75, cacheReadPerMTok: 1.5,
+  },
   vpsDays: [],
   vpsSelectedDay: null,
   windows: [],
@@ -76,6 +89,23 @@ const messageColumns = document.querySelector('.message-columns');
 
 function isLocalMessages() {
   return state.source === 'local' && state.view === 'messages';
+}
+
+// "Analisando": o usuário está lendo a lista de Mensagens com algo expandido ou a
+// lista rolada. Enquanto isso, o auto-refresh NÃO reconstrói a lista — reconstruir
+// colapsaria os blocos abertos e jogaria a rolagem pro topo. O botão Recarregar e a
+// troca de janela seguem funcionando (recarregam sob demanda).
+function messagesBusy() {
+  return state.view === 'messages'
+    && (tableScroll.scrollTop > 0 || messageGroups.querySelector('details[open]') !== null);
+}
+
+// Accordion: ao abrir um <details>, fecha os irmãos abertos do mesmo tipo dentro
+// do container (mensagens entre si; eventos entre si, dentro da mensagem).
+function collapseSiblings(container, selector, keep) {
+  for (const node of container.querySelectorAll(`${selector}[open]`)) {
+    if (node !== keep) node.open = false;
+  }
 }
 
 function t(key, values = {}) {
@@ -129,6 +159,59 @@ function time(value, seconds = false) {
 function usd(value) {
   return new Intl.NumberFormat(state.locale,
     { style: 'currency', currency: 'USD', maximumFractionDigits: 3 }).format(Number(value) || 0);
+}
+
+// Custo detalhado das parcelas: 4 casas — as parcelas pequenas (entrada) sumiriam
+// com as 3 casas da linha; o total do quadro mantém a mesma escala.
+function usd4(value) {
+  return new Intl.NumberFormat(state.locale, {
+    style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 4,
+  }).format(Number(value) || 0);
+}
+
+function perMTok(value) {
+  return new Intl.NumberFormat(state.locale, {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(value) || 0);
+}
+
+// As 4 parcelas de custo de um registro OU de um grupo (mesmos nomes de campo).
+function costParts(source) {
+  return {
+    inputUsd: Number(source.inputUsd) || 0,
+    outputUsd: Number(source.outputUsd) || 0,
+    cacheWriteUsd: Number(source.cacheWriteUsd) || 0,
+    cacheReadUsd: Number(source.cacheReadUsd) || 0,
+  };
+}
+
+// Barra de composição do custo (entrada · saída · cache escrita · cache leitura).
+function costBar(parts) {
+  const segments = [
+    ['cost-in', parts.inputUsd], ['cost-out', parts.outputUsd],
+    ['cost-cw', parts.cacheWriteUsd], ['cost-cr', parts.cacheReadUsd],
+  ];
+  const total = segments.reduce((sum, [, value]) => sum + value, 0);
+  if (total <= 0) return null;
+  const bar = create('div', 'cost-bar');
+  for (const [cls, value] of segments) {
+    if (value <= 0) continue;
+    const segment = create('i', cls);
+    segment.style.width = `${(value / total) * 100}%`;
+    bar.append(segment);
+  }
+  return bar;
+}
+
+// Preenche uma célula de custo com o valor + a barra de composição (ou '—').
+// title = tooltip do valor: no Local o valor é estimado; na VPS o valor é o custo
+// REAL (total_cost_usd), só a barra de composição é estimada.
+function fillCostCell(cell, source, totalUsd, priced, title = t('dashEstimated')) {
+  if (!priced) { cell.textContent = '—'; return; }
+  cell.title = title;
+  cell.append(create('span', 'cost-value', usd(totalUsd)));
+  const bar = costBar(costParts(source));
+  if (bar) cell.append(bar);
 }
 
 function dateTime(value) {
@@ -202,6 +285,10 @@ function groupRecords(records) {
         cacheReadTokens: 0,
         cacheCreationTokens: 0,
         costUsd: 0,
+        inputUsd: 0,
+        outputUsd: 0,
+        cacheWriteUsd: 0,
+        cacheReadUsd: 0,
         priced: false,
         records: [],
         agents: new Set(),
@@ -220,6 +307,10 @@ function groupRecords(records) {
     group.cacheReadTokens += Number(record.cacheReadTokens) || 0;
     group.cacheCreationTokens += Number(record.cacheCreationTokens) || 0;
     group.costUsd += Number(record.costUsd) || 0;
+    group.inputUsd += Number(record.inputUsd) || 0;
+    group.outputUsd += Number(record.outputUsd) || 0;
+    group.cacheWriteUsd += Number(record.cacheWriteUsd) || 0;
+    group.cacheReadUsd += Number(record.cacheReadUsd) || 0;
     if (record.priced) group.priced = true;
     group.records.push(record);
     group.agents.add(agentName(record));
@@ -363,13 +454,98 @@ function appendIdentifier(host, label, value) {
   host.append(line);
 }
 
-function appendEvent(host, record) {
-  const row = create('div', `event${record.eventKind === 'error' ? ' error' : ''}`);
-  const copy = create('span', 'event-copy');
-  copy.append(
-    create('strong', null, activityFor(record)),
-    create('small', 'event-context', eventContext(record)),
+// Quadro "Custo detalhado" de UM evento: as 4 parcelas (tokens · preço · custo) +
+// o total. Só é montado quando há preço (o wrapper <details> só existe se priced).
+function eventBreakdown(record) {
+  const wrap = create('div', 'event-breakdown');
+  wrap.append(create('div', 'event-breakdown-title', t('costBreakdown')));
+  const lines = [
+    ['cost-in', t('input'), record.inputTokens, state.pricing?.inputPerMTok, record.inputUsd],
+    ['cost-out', t('output'), record.outputTokens, state.pricing?.outputPerMTok, record.outputUsd],
+    ['cost-cw', t('cacheWrite'), record.cacheCreationTokens, state.pricing?.cacheWritePerMTok, record.cacheWriteUsd],
+    ['cost-cr', t('cacheRead'), record.cacheReadTokens, state.pricing?.cacheReadPerMTok, record.cacheReadUsd],
+  ];
+  for (const [cls, label, tokens, price, cost] of lines) {
+    const name = create('span', 'breakdown-name');
+    name.append(create('i', `cost-dot ${cls}`), document.createTextNode(label));
+    const line = create('div', 'breakdown-row');
+    line.append(
+      name,
+      create('span', 'breakdown-num muted', number(tokens)),
+      create('span', 'breakdown-num muted', perMTok(price)),
+      create('span', 'breakdown-num', usd4(cost)),
+    );
+    wrap.append(line);
+  }
+  const totalRow = create('div', 'breakdown-row total');
+  totalRow.append(
+    create('span', 'breakdown-total-label', t('total')),
+    create('span', 'breakdown-num muted', number(recordTotal(record))),
+    create('span', null, ''),
+    create('span', 'breakdown-num cost', usd4(record.costUsd)),
   );
+  wrap.append(totalRow);
+  return wrap;
+}
+
+function ioBlockLabel(block) {
+  if (block.kind === 'tool_use') return `${t('ioToolUse')}: ${block.name}`;
+  if (block.kind === 'tool_result') return t('ioToolResult');
+  if (block.kind === 'thinking') return t('ioThinking');
+  return t('ioText');
+}
+
+function ioSection(title, blocks, side, emptyLabel) {
+  const section = create('div', `io-section io-${side}`);
+  section.append(create('div', 'io-title', title));
+  if (!blocks || !blocks.length) {
+    section.append(create('div', 'io-empty', emptyLabel));
+    return section;
+  }
+  for (const block of blocks) {
+    const item = create('div', 'io-block');
+    item.append(create('div', 'io-block-label', ioBlockLabel(block)));
+    const pre = create('pre', 'io-pre');
+    pre.textContent = block.truncated ? `${block.text}\n…\n${t('ioTruncated')}` : block.text;
+    item.append(pre);
+    section.append(item);
+  }
+  return section;
+}
+
+// Conteúdo real do evento (enviado/recebido), buscado sob demanda no 1º expandir.
+async function loadEventContent(id, host) {
+  host.replaceChildren(create('div', 'io-state', t('loading')));
+  let result;
+  try {
+    result = await windowThis.consumptionApi.eventContent({ id });
+  } catch {
+    result = { error: 'failed' };
+  }
+  if (!result || result.error) {
+    host.replaceChildren(create('div', 'io-state', t('ioUnavailable')));
+    return;
+  }
+  renderIo(host, result);
+}
+
+// Renderiza as seções Enviado/Recebido a partir de {input, output}. Usada pelo
+// Local (busca por evento) e pela VPS (conteúdo já vem embutido no turn-detail).
+function renderIo(host, io) {
+  host.replaceChildren(
+    ioSection(t('sent'), io?.input, 'sent', t('ioSentEmpty')),
+    ioSection(t('received'), io?.output, 'received', t('ioReceivedEmpty')),
+  );
+}
+
+function appendEvent(host, record) {
+  const errorClass = record.eventKind === 'error' ? ' error' : '';
+  const row = create(record.priced ? 'summary' : 'div', `event${errorClass}`);
+  const copy = create('span', 'event-copy');
+  const name = create('strong');
+  name.append(document.createTextNode(activityFor(record)));
+  if (record.priced) name.append(create('span', 'event-caret', '›'));
+  copy.append(name, create('small', 'event-context', eventContext(record)));
   appendIdentifier(copy, t('requestId'), record.requestId);
   appendIdentifier(copy, t('messageId'), record.messageId);
   appendIdentifier(copy, t('recordId'), record.id);
@@ -378,10 +554,10 @@ function appendEvent(host, record) {
   const cachedInput = (Number(record.cacheReadTokens) || 0) + (Number(record.cacheCreationTokens) || 0);
   const cacheShare = Math.round(100 * (Number(record.cacheReadTokens) || 0)
     / Math.max(1, cachedInput + (Number(record.inputTokens) || 0)));
-  const cost = create('span', 'cost', record.priced ? usd(record.costUsd) : '—');
-  if (record.priced) cost.title = t('dashEstimated');
+  const cost = create('span', 'cost');
+  fillCostCell(cost, record, record.costUsd, record.priced);
   row.append(
-    create('span', null, time(record.endedAt, true)),
+    create('span', null, record.endedAt ? time(record.endedAt, true) : ''),
     copy,
     create('span', null, number(record.inputTokens)),
     create('span', null, number(record.outputTokens)),
@@ -389,7 +565,23 @@ function appendEvent(host, record) {
     cost,
     create('span', 'event-total', number(recordTotal(record))),
   );
-  host.append(row);
+  if (!record.priced) { host.append(row); return; }
+  const details = create('details', 'event-item');
+  const ioHost = create('div', 'event-io');
+  let contentLoaded = false;
+  // Conteúdo: Local busca por evento (loadEventContent); VPS já traz embutido no
+  // registro (record.input/output) — aí só renderiza.
+  const bundled = Array.isArray(record.input) || Array.isArray(record.output);
+  details.addEventListener('toggle', () => {
+    if (!details.open) return;
+    collapseSiblings(details.parentElement, 'details.event-item', details);
+    if (contentLoaded) return;
+    contentLoaded = true;
+    if (bundled) renderIo(ioHost, record);
+    else void loadEventContent(record.id, ioHost);
+  });
+  details.append(row, eventBreakdown(record), ioHost);
+  host.append(details);
 }
 
 function appendGroupMetadata(host, label, values) {
@@ -403,6 +595,9 @@ function appendGroupMetadata(host, label, values) {
 
 function appendMessageGroup(group) {
   const details = create('details', 'message-group');
+  details.addEventListener('toggle', () => {
+    if (details.open) collapseSiblings(messageGroups, 'details.message-group', details);
+  });
   const summary = create('summary', 'message-summary');
   const copy = create('span', 'message-copy');
   copy.append(create('strong', null, group.promptText || group.records[0]?.projectName
@@ -417,8 +612,8 @@ function appendMessageGroup(group) {
   const cachedInput = group.cacheReadTokens + group.cacheCreationTokens;
   const cacheShare = Math.round(100 * group.cacheReadTokens
     / Math.max(1, cachedInput + group.inputTokens));
-  const costCell = create('span', 'metric cost', group.priced ? usd(group.costUsd) : '—');
-  if (group.priced) costCell.title = t('dashEstimated');
+  const costCell = create('span', 'metric cost');
+  fillCostCell(costCell, group, group.costUsd, group.priced);
   summary.append(
     create('span', 'message-time', time(group.endedAt, true)),
     copy,
@@ -632,7 +827,7 @@ if (!windowThis.consumptionApi) {
   windowThis.consumptionApi.onChanged(() => {
     clearTimeout(changedTimer);
     changedTimer = setTimeout(() => {
-      if (isLocalMessages()) void reload();
+      if (isLocalMessages()) { if (!messagesBusy()) void reload(); }
       else if (state.source === 'local' && state.view === 'dashboard') {
         // Ritmo próprio: o ingest emite 'changed' em rajada durante o uso; o
         // dashboard re-renderiza no máximo a cada 5s (sem flash — ver loadDashboard).
@@ -738,7 +933,7 @@ refreshButton.addEventListener('click', async () => {
 const AUTO_REFRESH_MS = 60_000;
 let autoRefreshBusy = false;
 async function autoRefresh() {
-  if (autoRefreshBusy || document.visibilityState !== 'visible') return;
+  if (autoRefreshBusy || document.visibilityState !== 'visible' || messagesBusy()) return;
   autoRefreshBusy = true;
   try {
     if (state.source === 'local') await windowThis.consumptionApi.refresh();
@@ -784,10 +979,12 @@ function ensureToday(rows) {
 }
 
 function normalizeVpsSeries(rows) {
-  // Economia de cache: cada token lido do cache custou 0,1× o preço de entrada em
-  // vez de 1×, então 0,9× a tarifa de entrada configurada é o que se poupou — sem
-  // preço amarrado a modelo (o usuário ajusta em Configurações se trocar de modelo).
+  // Economia de cache: cada token lido do cache custou o preço de LEITURA em vez do
+  // preço cheio de entrada, então o que se poupou é (entrada − leitura) por token —
+  // tudo com as tarifas configuráveis, sem preço amarrado a modelo.
   const inputPerToken = (Number(state.pricing?.inputPerMTok) || 0) / 1e6;
+  const cacheReadPerToken = (Number(state.pricing?.cacheReadPerMTok) || 0) / 1e6;
+  const savedPerCacheRead = Math.max(0, inputPerToken - cacheReadPerToken);
   return (Array.isArray(rows) ? rows : []).map((row) => {
     const cacheRead = Number(row.cache_read_tokens) || 0;
     const costUsd = Number(row.cost_usd) || 0;
@@ -799,7 +996,7 @@ function normalizeVpsSeries(rows) {
       cacheRead,
       output: Number(row.output_tokens) || 0,
       costUsd,
-      hypotheticalUsd: costUsd + cacheRead * 0.9 * inputPerToken,
+      hypotheticalUsd: costUsd + cacheRead * savedPerCacheRead,
       estimated: false,
     };
   });
@@ -908,6 +1105,14 @@ function vpsTurnRow(turn) {
     turn.proactive ? t('vpsProactive') : t('vpsReactive'),
     turn.phone_suffix ? `···${turn.phone_suffix}` : null,
   ].filter(Boolean).join(' · ')));
+
+  // Custo: valor = REAL (total_cost_usd) quando disponível, senão a estimativa; a
+  // barra de composição é sempre a estimativa (mesmas tarifas do Local).
+  const hasReal = turn.total_cost_usd != null;
+  const costCell = create('span', 'metric cost');
+  fillCostCell(costCell, turn, hasReal ? turn.total_cost_usd : turn.costUsd, turn.priced,
+    hasReal ? t('vpsRealCost') : t('dashEstimated'));
+
   summary.append(
     create('span', 'message-time', turn.time || ''),
     copy,
@@ -915,13 +1120,71 @@ function vpsTurnRow(turn) {
       + usage.cache_read_input_tokens) : '—'),
     create('span', 'metric', usage ? number(usage.output_tokens) : '—'),
     create('span', 'metric cache', cacheShare == null ? '—' : `${cacheShare}%`),
-    create('span', 'metric cost', turn.total_cost_usd == null ? '—' : usd(turn.total_cost_usd)),
+    costCell,
     create('span', 'metric total', usage ? number(usage.input_tokens + usage.cache_creation_input_tokens
       + usage.cache_read_input_tokens + usage.output_tokens) : '—'),
     create('span', 'chevron', '›'),
   );
-  details.append(summary);
+
+  // Turno expansível: acordeão + corpo com o quadro de custo detalhado (estimado)
+  // e, ao abrir, os EVENTOS por chamada (com custo detalhado + conteúdo enviado/
+  // recebido) carregados sob demanda do transcript da sessão.
+  if (!turn.priced) { details.append(summary); return details; }
+  const eventsHost = create('div', 'vps-turn-events');
+  let detailLoaded = false;
+  details.addEventListener('toggle', () => {
+    if (!details.open) return;
+    collapseSiblings(messageGroups, 'details.message-group', details);
+    if (detailLoaded) return;
+    detailLoaded = true;
+    void loadVpsTurnDetail(turn, eventsHost);
+  });
+  const expanded = create('div', 'message-expanded');
+  const body = create('div', 'vps-turn-body');
+  body.append(eventBreakdown(turn));
+  if (hasReal) {
+    body.append(create('div', 'vps-cost-note',
+      `${t('vpsRealCost')}: ${usd(turn.total_cost_usd)} · ${t('dashEstimated')}: ${usd(turn.costUsd)}`));
+  }
+  body.append(eventsHost);
+  expanded.append(body);
+  details.append(summary, expanded);
   return details;
+}
+
+// Eventos de um turno VPS (chamadas à API): busca o detalhe (do transcript, via
+// módulo→wrapper) e renderiza cada evento reusando appendEvent — custo detalhado +
+// conteúdo enviado/recebido, igual ao Local. Turno antigo/expirado → aviso.
+async function loadVpsTurnDetail(turn, host) {
+  if (!turn.detail_available) {
+    host.replaceChildren(create('div', 'io-state', t('vpsDetailUnavailable')));
+    return;
+  }
+  host.replaceChildren(create('div', 'io-state', t('loading')));
+  let result;
+  try {
+    result = await windowThis.consumptionApi.vpsTurnDetail({ id_queue: turn.id_queue });
+  } catch {
+    result = { error: 'failed' };
+  }
+  const soft = new Set(['expired', 'not_found', 'no_session']);
+  if (!result || result.error || !Array.isArray(result.events)) {
+    host.replaceChildren(create('div', 'io-state',
+      soft.has(result?.error) ? t('vpsDetailUnavailable') : t('vpsTurnDetailError')));
+    return;
+  }
+  if (!result.events.length) {
+    host.replaceChildren(create('div', 'io-state', t('noMessages')));
+    return;
+  }
+  const events = create('div', 'event-list');
+  const header = create('div', 'event-header');
+  for (const label of [t('time'), t('event'), t('input'), t('output'), t('cache'), t('cost'), t('total')]) {
+    header.append(create('span', null, label));
+  }
+  events.append(header);
+  for (const record of result.events) appendEvent(events, record);
+  host.replaceChildren(events);
 }
 
 async function loadVpsTurns(day) {

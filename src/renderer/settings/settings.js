@@ -144,12 +144,16 @@ function commitPricing() {
     pricing: {
       inputPerMTok: Number($('priceInput').value),
       outputPerMTok: Number($('priceOutput').value),
+      cacheWritePerMTok: Number($('priceCacheWrite').value),
+      cacheReadPerMTok: Number($('priceCacheRead').value),
     },
   });
 }
 
 $('priceInput').addEventListener('change', commitPricing);
 $('priceOutput').addEventListener('change', commitPricing);
+$('priceCacheWrite').addEventListener('change', commitPricing);
+$('priceCacheRead').addEventListener('change', commitPricing);
 
 // Fonte "VPS" da tela de consumo (API do atendimento; token READ-ONLY basta).
 $('vpsUrl').addEventListener('change', () => push({ vpsUrl: $('vpsUrl').value }));
@@ -284,6 +288,8 @@ function syncControls() {
   $('retentionSize').value = String(state.settings.consumptionRetention.maxMb);
   $('priceInput').value = String(state.settings.pricing.inputPerMTok);
   $('priceOutput').value = String(state.settings.pricing.outputPerMTok);
+  $('priceCacheWrite').value = String(state.settings.pricing.cacheWritePerMTok);
+  $('priceCacheRead').value = String(state.settings.pricing.cacheReadPerMTok);
   $('vpsUrl').value = state.settings.vpsUrl || '';
   $('vpsToken').value = state.settings.vpsToken || '';
   renderMeters();
