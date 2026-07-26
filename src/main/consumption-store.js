@@ -781,7 +781,6 @@ class ConsumptionStore {
     }
 
     const ceiling = retention.maxMb * 1024 * 1024;
-    const target = Math.floor(ceiling * 0.9);
     if (!runAgePrune && this.databaseSize() <= ceiling) {
       return {
         deleted,
@@ -802,66 +801,16 @@ class ConsumptionStore {
       };
     }
 
-    // Evict complete detail rows in chronological order until the database is
-    // under the hysteresis target, or until only the minimal import cursors are
-    // left. There is deliberately no arbitrary batch-count limit: a large first
-    // import must not be allowed to remain permanently above the configured cap.
-    while (this.databaseSize() > target) {
-      let result = this.db.prepare(`
-        DELETE FROM usage_records WHERE id IN (
-          SELECT id FROM usage_records ORDER BY ended_at ASC, id ASC LIMIT 5000
-        )
-      `).run();
-      if (result.changes) {
-        deleted += result.changes;
-        // Once a detail row is evicted, its otherwise unreachable prompt context
-        // should not linger until the age cutoff.
-        this._cleanupDetachedAncestry();
-      } else {
-        result = this.db.prepare(`
-          DELETE FROM prompt_ancestry WHERE rowid IN (
-            SELECT rowid FROM prompt_ancestry ORDER BY updated_at ASC LIMIT 5000
-          )
-        `).run();
-        if (!result.changes) {
-          result = this.db.prepare(`
-            DELETE FROM usage_windows WHERE reset_at IN (
-              SELECT reset_at FROM usage_windows ORDER BY reset_at ASC LIMIT 1000
-            )
-          `).run();
-        }
-        if (!result.changes) {
-          result = this.db.prepare(`
-            UPDATE transcript_cursors SET
-              session_id = NULL,
-              cwd = NULL,
-              last_prompt = NULL,
-              last_prompt_uuid = NULL,
-              last_prompt_kind = NULL,
-              parser_state = NULL
-            WHERE session_id IS NOT NULL OR cwd IS NOT NULL
-              OR last_prompt IS NOT NULL OR last_prompt_uuid IS NOT NULL
-              OR last_prompt_kind IS NOT NULL OR parser_state IS NOT NULL
-          `).run();
-        }
-        if (!result.changes) break;
-      }
-      this._cleanupOrphanPrompts();
-      this._compact();
-    }
-
-    const orphaned = this._cleanupOrphanPrompts();
-    if (orphaned) this._compact();
-    else this._checkpoint();
-    if (this.databaseSize() > target) {
-      // Incremental vacuum cannot reclaim an older database created without
-      // auto_vacuum. A full vacuum is the final, rare compaction attempt.
-      try {
-        this.db.exec('VACUUM');
-        this.db.pragma('wal_checkpoint(TRUNCATE)');
-      } catch {
-        // Another short-lived reader may hold a lock; the next worker pass retries.
-      }
+    // O teto de tamanho agora é somente um ALERTA: a garantia de auditoria exige
+    // que nenhum turno dentro da retenção temporal seja removido antecipadamente.
+    // A limpeza por idade acima continua sendo a única operação destrutiva.
+    if (this.databaseSize() > ceiling) {
+      return {
+        deleted,
+        sizeBytes: this.databaseSize(),
+        overLimit: true,
+        ageSkipped: !runAgePrune,
+      };
     }
     const sizeBytes = this.databaseSize();
     return {

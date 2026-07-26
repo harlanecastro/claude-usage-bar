@@ -95,7 +95,7 @@
     "alignLeft": "Put it in the left corner",
     "alignLeftHint": "Parks the widget at the left edge of the taskbar instead of next to the clock. Useful when your taskbar icons are centred and that corner is going to waste.",
     "consumptionRetention": "Consumption history",
-    "consumptionRetentionHint": "The oldest records are removed when they reach either the age or size limit below.",
+    "consumptionRetentionHint": "Audits are retained for at least 30 days; the size limit raises an alert without early deletion.",
     "retentionDays": "Keep for",
     "retentionDaysUnit": "days",
     "retentionSize": "Database limit",

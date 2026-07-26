@@ -392,7 +392,7 @@ test('backfills complete transcripts after retention is increased', async (t) =>
   assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM usage_records').get().count, 2);
 });
 
-test('enforces the size cap and scrubs expired cursor context', (t) => {
+test('reports the size alert without deleting recent audits and scrubs expired cursor context', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-bar-retention-'));
   const dbPath = path.join(root, 'consumption.sqlite3');
   const retention = { days: 30, maxMb: 1 };
@@ -433,8 +433,9 @@ test('enforces the size cap and scrubs expired cursor context', (t) => {
 
   const result = store.prune(true);
   const cursor = store.getCursor('/tmp/old.jsonl');
-  assert.equal(result.overLimit, false);
-  assert.ok(result.sizeBytes <= retention.maxMb * 1024 * 1024);
+  assert.equal(result.overLimit, true);
+  assert.ok(result.sizeBytes > retention.maxMb * 1024 * 1024);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM usage_records').get().count, 2000);
   assert.equal(cursor.byte_offset, 123);
   assert.equal(cursor.session_id, null);
   assert.equal(cursor.cwd, null);

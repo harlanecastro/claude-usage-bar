@@ -95,7 +95,7 @@
     "alignLeft": "Ponerlo en la esquina izquierda",
     "alignLeftHint": "Fija el widget en el borde izquierdo de la barra en vez de junto al reloj. Útil cuando tus iconos están centrados y esa esquina se desaprovecha.",
     "consumptionRetention": "Historial de consumo",
-    "consumptionRetentionHint": "Los registros más antiguos se eliminan al alcanzar el límite de edad o tamaño definido abajo.",
+    "consumptionRetentionHint": "La auditoría se conserva por al menos 30 días; el límite de tamaño genera una alerta sin borrado anticipado.",
     "retentionDays": "Conservar por",
     "retentionDaysUnit": "días",
     "retentionSize": "Límite de la base",

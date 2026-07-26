@@ -547,6 +547,72 @@ async function loadEventContent(id, host) {
   renderIo(host, result);
 }
 
+function auditLevelLabel(level) {
+  if (level === 'api_exact') return 'API exata';
+  if (level === 'cli_observable') return 'CLI observável';
+  return 'Parcial';
+}
+
+function renderAudit(host, manifest, loadSection) {
+  const panel = create('div', 'audit-panel');
+  panel.append(create('div', `audit-level audit-${manifest.audit_level || 'partial'}`,
+    auditLevelLabel(manifest.audit_level)));
+  const limitations = Array.isArray(manifest.limitations) ? manifest.limitations : [];
+  if (limitations.length) {
+    const warning = create('div', 'audit-limitations');
+    for (const item of limitations) warning.append(create('div', null, item.message || item.code));
+    panel.append(warning);
+  }
+  const sections = create('div', 'audit-sections');
+  for (const metadata of (manifest.sections || [])) {
+    const details = create('details', 'audit-section');
+    const summary = create('summary', null,
+      `${metadata.label || metadata.kind} · ${number(metadata.bytes || 0)} bytes · SHA-256 ${String(metadata.sha256 || '').slice(0, 12)}…`);
+    const content = create('div', 'audit-content');
+    details.addEventListener('toggle', async () => {
+      if (!details.open || content.dataset.loaded) return;
+      content.dataset.loaded = '1';
+      content.append(create('div', 'io-state', t('loading')));
+      const section = await loadSection(metadata.id).catch(() => ({ error: 'failed' }));
+      content.replaceChildren();
+      if (!section || section.error) {
+        content.append(create('div', 'io-state', t('ioUnavailable')));
+        return;
+      }
+      const value = section.encoding === 'base64'
+        ? `[base64]\n${section.content || ''}`
+        : String(section.content || '');
+      const actions = create('div', 'audit-actions');
+      const copyButton = create('button', 'audit-button', 'Copiar');
+      copyButton.type = 'button';
+      copyButton.addEventListener('click', () => navigator.clipboard.writeText(value));
+      const exportButton = create('button', 'audit-button', 'Exportar');
+      exportButton.type = 'button';
+      exportButton.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([value], { type: section.media_type || metadata.media_type || 'text/plain' }));
+        link.download = `${metadata.kind || 'audit'}-${metadata.id}.txt`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+      actions.append(copyButton, exportButton);
+      content.append(actions, create('pre', 'io-pre audit-raw', value));
+    });
+    details.append(summary, content);
+    sections.append(details);
+  }
+  panel.append(sections);
+  host.replaceChildren(panel);
+}
+
+async function loadEventAudit(id, host) {
+  host.replaceChildren(create('div', 'io-state', t('loading')));
+  const manifest = await windowThis.consumptionApi.eventAudit({ id }).catch(() => ({ error: 'failed' }));
+  if (!manifest || manifest.error) return loadEventContent(id, host);
+  renderAudit(host, manifest,
+    (sectionId) => windowThis.consumptionApi.auditSection({ section_id: sectionId }));
+}
+
 // Renderiza as seções Enviado/Recebido a partir de {input, output}. Usada pelo
 // Local (busca por evento) e pela VPS (conteúdo já vem embutido no turn-detail).
 function renderIo(host, io) {
@@ -595,7 +661,8 @@ function appendEvent(host, record) {
     collapseSiblings(details.parentElement, 'details.event-item', details);
     if (contentLoaded) return;
     contentLoaded = true;
-    if (bundled) renderIo(ioHost, record);
+    if (record.id) void loadEventAudit(record.id, ioHost);
+    else if (bundled) renderIo(ioHost, record);
     else void loadEventContent(record.id, ioHost);
   });
   // Conteúdo enviado/recebido PRIMEIRO (é o que mais importa ver), depois o quadro
@@ -1219,8 +1286,12 @@ async function loadVpsTurnDetail(turn, host) {
   }
   host.replaceChildren(create('div', 'io-state', t('loading')));
   let result;
+  let audit;
   try {
-    result = await windowThis.consumptionApi.vpsTurnDetail({ id_queue: turn.id_queue });
+    [result, audit] = await Promise.all([
+      windowThis.consumptionApi.vpsTurnDetail({ id_queue: turn.id_queue }),
+      windowThis.consumptionApi.vpsTurnAudit({ id_queue: turn.id_queue }),
+    ]);
   } catch {
     result = { error: 'failed' };
   }
@@ -1235,6 +1306,15 @@ async function loadVpsTurnDetail(turn, host) {
     return;
   }
   const events = create('div', 'event-list');
+  if (audit && !audit.error) {
+    const auditHost = create('div', 'event-io');
+    renderAudit(auditHost, audit,
+      (sectionId) => windowThis.consumptionApi.vpsAuditSection({
+        id_queue: turn.id_queue,
+        section_id: sectionId,
+      }));
+    events.append(auditHost);
+  }
   const header = create('div', 'event-header');
   for (const label of [t('time'), t('event'), t('input'), t('output'), t('cache'), t('cost'), t('total')]) {
     header.append(create('span', null, label));

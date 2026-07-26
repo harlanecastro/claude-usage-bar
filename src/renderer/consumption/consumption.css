@@ -381,6 +381,27 @@ summary.event::-webkit-details-marker { display: none; }
   border-radius: 6px; font: 12px/1.5 var(--mono); color: var(--text);
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto;
 }
+.audit-panel { padding: 8px 0 14px; }
+.audit-level {
+  display: inline-block; padding: 3px 8px; border: 1px solid var(--border);
+  border-radius: 999px; font: 10px var(--mono); text-transform: uppercase;
+}
+.audit-api_exact { color: var(--dash-good); }
+.audit-cli_observable { color: var(--dash-cacheread); }
+.audit-partial { color: var(--accent); }
+.audit-limitations {
+  margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--accent);
+  background: var(--surface); color: var(--muted); font: 11px/1.5 var(--mono);
+}
+.audit-section { border-bottom: 1px solid var(--border); }
+.audit-section > summary { padding: 9px 0; cursor: pointer; font: 11px var(--mono); }
+.audit-content { padding-bottom: 10px; }
+.audit-actions { display: flex; gap: 6px; margin-bottom: 6px; }
+.audit-button {
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--text); padding: 4px 9px; cursor: pointer;
+}
+.audit-raw { max-height: 520px; white-space: pre; }
 
 /* Turno VPS expandido: quadro de custo (estimado) + nota real vs estimado. */
 .vps-turn-body { padding: 6px 16px 12px; }

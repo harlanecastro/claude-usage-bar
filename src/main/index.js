@@ -15,6 +15,7 @@ const { ConsumptionStore } = require('./consumption-store');
 const { ConsumptionService } = require('./consumption-service');
 const pricing = require('./pricing');
 const { readEventContent } = require('./event-content');
+const { localAuditManifest, localAuditSection } = require('./audit-content');
 
 // Carimba as 4 parcelas de custo + total num objeto (registro local OU turno/evento
 // VPS) a partir dos seus tokens e das tarifas configuradas — para a UI de custo
@@ -816,6 +817,17 @@ ipcMain.handle('consumption:event-content', (event, request) => {
   });
 });
 
+ipcMain.handle('consumption:event-audit', (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  const location = consumptionStore?.getRecordLocation(request?.id);
+  return location ? localAuditManifest(location) : { error: 'not_found' };
+});
+
+ipcMain.handle('consumption:audit-section', (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  return localAuditSection(request?.section_id);
+});
+
 // Dashboard — série DIÁRIA local: agrega o SQLite por dia (fuso do computador)
 // e aplica as tarifas configuradas (custo "estimado", rotulado na UI).
 ipcMain.handle('consumption:daily', (event, request) => {
@@ -922,6 +934,18 @@ ipcMain.handle('consumption:vps-turn-detail', async (event, request) => {
     return record;
   });
   return { events };
+});
+
+ipcMain.handle('consumption:vps-turn-audit', async (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  const result = await vpsUsage.fetchAiTurnAudit(request?.id_queue);
+  return result?.data || result || { error: 'unknown' };
+});
+
+ipcMain.handle('consumption:vps-audit-section', async (event, request) => {
+  if (!validConsumptionSender(event)) throw new Error('Forbidden');
+  const result = await vpsUsage.fetchAiTurnAuditSection(request?.id_queue, request?.section_id);
+  return result?.data || result || { error: 'unknown' };
 });
 
 // Card "Configure a VPS" da tela de consumo abre as Configurações.

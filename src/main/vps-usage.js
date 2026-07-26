@@ -118,10 +118,26 @@ function fetchAiTurnDetail(idQueue) {
   return request('ai_turn_detail', { id_queue: id });
 }
 
+function fetchAiTurnAudit(idQueue) {
+  const id = Number(idQueue);
+  if (!Number.isInteger(id) || id <= 0) return Promise.resolve({ error: 'bad_id' });
+  return request('ai_turn_audit', { id_queue: id });
+}
+
+function fetchAiTurnAuditSection(idQueue, sectionId) {
+  const id = Number(idQueue);
+  if (!Number.isInteger(id) || id <= 0 || !/^[0-9a-f-]{16,80}$/i.test(String(sectionId || ''))) {
+    return Promise.resolve({ error: 'bad_id' });
+  }
+  return request('ai_turn_audit_section', { id_queue: id, section_id: sectionId });
+}
+
 module.exports = {
   fetchAiUsage,
   fetchAiTurns,
   fetchAiTurnDetail,
+  fetchAiTurnAudit,
+  fetchAiTurnAuditSection,
   normalizeUsage,
   normalizePayload,
 };

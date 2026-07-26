@@ -96,7 +96,7 @@ function normalizeRetention(value) {
   const days = Number.isFinite(Number(raw.days)) ? Math.round(Number(raw.days)) : DEFAULTS.consumptionRetention.days;
   const maxMb = Number.isFinite(Number(raw.maxMb)) ? Math.round(Number(raw.maxMb)) : DEFAULTS.consumptionRetention.maxMb;
   return {
-    days: Math.min(Math.max(days, 7), 365),
+    days: Math.min(Math.max(days, 30), 365),
     maxMb: Math.min(Math.max(maxMb, 25), 1000),
   };
 }

@@ -95,7 +95,7 @@
     "alignLeft": "Colocar no canto esquerdo",
     "alignLeftHint": "Fixa o widget na borda esquerda da barra em vez de ao lado do relógio. Útil quando seus ícones estão centralizados e aquele canto está sendo desperdiçado.",
     "consumptionRetention": "Histórico de consumo",
-    "consumptionRetentionHint": "Os registros mais antigos são removidos quando atingem a idade ou o tamanho definidos abaixo.",
+    "consumptionRetentionHint": "A auditoria é mantida por no mínimo 30 dias; o limite de tamanho gera alerta, sem exclusão antecipada.",
     "retentionDays": "Manter por",
     "retentionDaysUnit": "dias",
     "retentionSize": "Limite do banco",
