@@ -73,6 +73,7 @@ class ConsumptionStore {
         last_prompt TEXT,
         last_prompt_uuid TEXT,
         last_prompt_kind TEXT,
+        parser_state TEXT,
         content_at INTEGER NOT NULL DEFAULT 0,
         last_seen_at INTEGER NOT NULL
       );
@@ -95,6 +96,7 @@ class ConsumptionStore {
 
       CREATE TABLE IF NOT EXISTS usage_records (
         id TEXT PRIMARY KEY,
+        origin TEXT NOT NULL DEFAULT 'claude_code',
         session_id TEXT NOT NULL,
         request_id TEXT,
         message_id TEXT,
@@ -159,6 +161,7 @@ class ConsumptionStore {
     // schema makes opening either version idempotent.
     this._ensureColumn('transcript_cursors', 'content_at', 'INTEGER NOT NULL DEFAULT 0');
     this._ensureColumn('transcript_cursors', 'last_prompt_kind', 'TEXT');
+    this._ensureColumn('transcript_cursors', 'parser_state', 'TEXT');
     this._ensureColumn('prompt_ancestry', 'prompt_kind', 'TEXT');
     this._ensureColumn('usage_records', 'agent_description', 'TEXT');
     this._ensureColumn('usage_records', 'agent_tool_use_id', 'TEXT');
@@ -167,6 +170,7 @@ class ConsumptionStore {
     this._ensureColumn('usage_records', 'error_code', 'TEXT');
     this._ensureColumn('usage_records', 'error_status', 'INTEGER');
     this._ensureColumn('usage_records', 'status_text', 'TEXT');
+    this._ensureColumn('usage_records', 'origin', "TEXT NOT NULL DEFAULT 'claude_code'");
   }
 
   _ensureColumn(table, column, definition) {
@@ -186,7 +190,7 @@ class ConsumptionStore {
     this.promptLinkBatchStatements = new Map();
     this.upsertRecord = this.db.prepare(`
       INSERT INTO usage_records (
-        id, session_id, request_id, message_id, first_uuid, last_uuid,
+        id, origin, session_id, request_id, message_id, first_uuid, last_uuid,
         source_path, first_line, last_line, started_at, ended_at, cwd,
         project_name, git_branch, prompt_text, prompt_uuid, agent_id, agent_label,
         agent_description, agent_tool_use_id, agent_type, spawn_depth, model,
@@ -198,7 +202,7 @@ class ConsumptionStore {
         inference_geo, iterations_json, event_kind, error_code, error_status,
         status_text, updated_at
       ) VALUES (
-        @id, @sessionId, @requestId, @messageId, @firstUuid, @lastUuid,
+        @id, @origin, @sessionId, @requestId, @messageId, @firstUuid, @lastUuid,
         @sourcePath, @firstLine, @lastLine, @startedAt, @endedAt, @cwd,
         @projectName, @gitBranch, @promptText, @promptUuid, @agentId, @agentLabel,
         @agentDescription, @agentToolUseId, @agentType, @spawnDepth, @model,
@@ -211,6 +215,7 @@ class ConsumptionStore {
         @statusText, @updatedAt
       )
       ON CONFLICT(id) DO UPDATE SET
+        origin = excluded.origin,
         request_id = COALESCE(excluded.request_id, usage_records.request_id),
         message_id = COALESCE(excluded.message_id, usage_records.message_id),
         last_uuid = excluded.last_uuid,
@@ -258,11 +263,11 @@ class ConsumptionStore {
       INSERT INTO transcript_cursors (
         source_path, byte_offset, line_number, file_size, mtime_ms,
         session_id, cwd, last_prompt, last_prompt_uuid, last_prompt_kind,
-        content_at, last_seen_at
+        parser_state, content_at, last_seen_at
       ) VALUES (
         @sourcePath, @byteOffset, @lineNumber, @fileSize, @mtimeMs,
         @sessionId, @cwd, @lastPrompt, @lastPromptUuid, @lastPromptKind,
-        @contentAt, @lastSeenAt
+        @parserState, @contentAt, @lastSeenAt
       )
       ON CONFLICT(source_path) DO UPDATE SET
         byte_offset = excluded.byte_offset,
@@ -274,6 +279,7 @@ class ConsumptionStore {
         last_prompt = excluded.last_prompt,
         last_prompt_uuid = excluded.last_prompt_uuid,
         last_prompt_kind = excluded.last_prompt_kind,
+        parser_state = excluded.parser_state,
         content_at = excluded.content_at,
         last_seen_at = excluded.last_seen_at
     `);
@@ -354,6 +360,7 @@ class ConsumptionStore {
         record.agentDescription ??= null;
         record.agentToolUseId ??= null;
         record.gitBranch ??= null;
+        record.origin ??= 'claude_code';
         record.eventKind ??= 'usage';
         record.errorCode ??= null;
         record.errorStatus ??= null;
@@ -375,6 +382,7 @@ class ConsumptionStore {
     this.upsertCursor.run({
       ...cursor,
       lastPromptKind: cursor.lastPromptKind ?? null,
+      parserState: cursor.parserState ?? null,
       contentAt: cursor.contentAt ?? 0,
     });
   }
@@ -598,7 +606,7 @@ class ConsumptionStore {
     const cutoff = Date.now() - safeDays * DAY_MS;
     return this.db.prepare(`
       SELECT date(ended_at / 1000, 'unixepoch', 'localtime') AS day,
-        model,
+        origin, model,
         COUNT(DISTINCT COALESCE(request_id, id)) AS turns,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
@@ -606,7 +614,7 @@ class ConsumptionStore {
         COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
       FROM usage_records
       WHERE event_kind = 'usage' AND ended_at >= ?
-      GROUP BY day, model
+      GROUP BY day, origin, model
       ORDER BY day ASC
     `).all(cutoff);
   }
@@ -639,6 +647,7 @@ class ConsumptionStore {
     return {
       records: rows.map((row) => ({
         id: row.id,
+        origin: row.origin || 'claude_code',
         sessionId: row.session_id,
         requestId: row.request_id,
         messageId: row.message_id,
@@ -687,7 +696,8 @@ class ConsumptionStore {
   // demanda (o que foi enviado/recebido da API) sem guardar o conteúdo no banco.
   getRecordLocation(id) {
     return this.db.prepare(
-      'SELECT source_path, first_uuid, last_uuid FROM usage_records WHERE id = ?',
+      `SELECT origin, source_path, first_uuid, last_uuid, first_line, last_line
+       FROM usage_records WHERE id = ?`,
     ).get(String(id || ''));
   }
 
@@ -757,7 +767,8 @@ class ConsumptionStore {
             cwd = NULL,
             last_prompt = NULL,
             last_prompt_uuid = NULL,
-            last_prompt_kind = NULL
+            last_prompt_kind = NULL,
+            parser_state = NULL
           WHERE content_at < ?
         `).run(cutoff);
         this._cleanupOrphanPrompts();
@@ -826,10 +837,11 @@ class ConsumptionStore {
               cwd = NULL,
               last_prompt = NULL,
               last_prompt_uuid = NULL,
-              last_prompt_kind = NULL
+              last_prompt_kind = NULL,
+              parser_state = NULL
             WHERE session_id IS NOT NULL OR cwd IS NOT NULL
               OR last_prompt IS NOT NULL OR last_prompt_uuid IS NOT NULL
-              OR last_prompt_kind IS NOT NULL
+              OR last_prompt_kind IS NOT NULL OR parser_state IS NOT NULL
           `).run();
         }
         if (!result.changes) break;

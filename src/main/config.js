@@ -14,14 +14,14 @@ const DEFAULTS = {
   // Parks the strip in the taskbar's left corner instead of beside the clock —
   // dead space when the taskbar icons are centred.
   alignLeft: false,
-  // Detailed Claude Code usage is kept locally. Both limits are enforced: age
-  // handles normal rotation, while the size ceiling protects unusually busy
-  // installations from growing without bound.
+  // Detailed Claude Code and Codex usage is kept locally. Both limits are
+  // enforced: age handles normal rotation, while the size ceiling protects
+  // unusually busy installations from growing without bound.
   consumptionRetention: { days: 30, maxMb: 100 },
   // Preços (USD por milhão de tokens) usados para ESTIMAR o custo na tela de
-  // consumo — o transcript local só traz tokens, não valor. Entrada, saída e os
-  // dois preços de prompt caching (escrita/leitura), aplicados a todos os
-  // modelos; o padrão é o Opus e o usuário ajusta se trocar de modelo.
+  // consumo — os transcripts locais só trazem tokens, não valor. Entrada, saída
+  // e os dois preços de prompt caching (escrita/leitura) são aplicados a todos
+  // os modelos e origens; o usuário ajusta a régua conforme o uso local.
   pricing: {
     inputPerMTok: 15, outputPerMTok: 75, cacheWritePerMTok: 18.75, cacheReadPerMTok: 1.5,
   },

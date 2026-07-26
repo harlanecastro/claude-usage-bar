@@ -15,7 +15,7 @@ you when it resets.
 
 Left click opens a panel with the meters you chose to hide — nothing opens if you
 hide nothing. Right click opens the menu, which can toggle meters and reach the
-detailed local consumption history.
+detailed local consumption history for Claude Code and Codex.
 
 ## Claude Code status
 
@@ -87,20 +87,22 @@ normal browser window; the app keeps the `sessionKey` cookie it leaves behind
 already computed by the server, so the widget cannot drift from what claude.ai
 itself shows.
 
-Detailed consumption is local and deliberately separate from that percentage. A
-background worker incrementally reads the usage blocks in
-`~/.claude/projects/**/*.jsonl`, deduplicates the repeated blocks of each API
-response, and writes the token categories, project/session identifiers and a
-truncated copy of the associated user prompt to SQLite. It never stores assistant
-responses or tool inputs; structured API failures such as quota interruptions are
-kept with their error code, HTTP status and short status message so requests with
-zero returned tokens do not disappear. The consumption screen groups every event
-under its associated user message and emphasizes input, output and their sum;
-cache categories remain available in the local ledger but are intentionally absent
-from this report. Messages and non-empty hourly buckets are shown newest first and
-are grouped only under five-hour reset windows the app actually observed from
-claude.ai; older records remain available as explicitly unclassified periods
-instead of being assigned to invented windows.
+Detailed consumption is local and deliberately separate from that percentage. Two
+parsers in the same background worker incrementally read
+`~/.claude/projects/**/*.jsonl` for Claude Code and
+`$CODEX_HOME/{sessions,archived_sessions}/**/*.jsonl` for Codex (`~/.codex` when
+`CODEX_HOME` is unset). The Claude parser
+deduplicates repeated streaming snapshots; the Codex parser consumes only each
+`token_count.info.last_token_usage` delta and separates cached input from uncached
+input so cumulative counters are never double-counted. Both write token categories,
+origin, model, project/session identifiers and a truncated copy of the associated
+user prompt to the same SQLite ledger. Assistant responses and tool inputs remain
+in the original transcripts and are read only when an event is expanded. The
+dashboard combines both local origins and shows their turn split; message and event
+details identify whether each record came from Claude Code or Codex. Records are
+shown newest first inside observed five-hour Claude windows when available, while
+periods without a confirmed boundary remain explicitly unclassified instead of
+being assigned to invented windows.
 Retention defaults to 30 days or 100 MB, whichever is reached first, and both
 limits are configurable.
 
@@ -192,6 +194,7 @@ src/
     usage.js          claude.ai usage endpoints
     consumption-store.js   SQLite ledger, window queries, retention
     consumption-ingest.js  incremental Claude Code transcript parser
+    codex-consumption-ingest.js  incremental Codex transcript parser
     consumption-worker.js  keeps parsing and maintenance off the UI thread
     fetch-via-window.js
     i18n.js           translation + duration formatting

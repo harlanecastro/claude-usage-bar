@@ -14,6 +14,58 @@
 const { getSettings } = require('./config');
 
 const TIMEOUT_MS = 15_000;
+const CACHE_IS_INPUT_SUBSET = new Set(['codex_chatgpt', 'openai_api']);
+
+// OpenAI/Codex reportam cached input como SUBCONJUNTO de input_tokens; Claude
+// Code reporta input/cache-read/cache-write como categorias exclusivas. O
+// restante do app usa o contrato exclusivo, portanto normalizamos apenas os
+// providers OpenAI antes de calcular entrada, total, percentual e custo.
+function normalizeUsage(provider, usage, keys = {}) {
+  if (!usage || typeof usage !== 'object') return usage;
+  const inputKey = keys.input || 'input_tokens';
+  const cacheReadKey = keys.cacheRead || 'cache_read_input_tokens';
+  const cacheWriteKey = keys.cacheWrite || 'cache_creation_input_tokens';
+  const normalized = { ...usage };
+  if (CACHE_IS_INPUT_SUBSET.has(String(provider || ''))) {
+    const totalInput = Number(normalized[inputKey]) || 0;
+    const cacheRead = Number(normalized[cacheReadKey]) || 0;
+    const cacheWrite = Number(normalized[cacheWriteKey]) || 0;
+    normalized[inputKey] = Math.max(0, totalInput - cacheRead - cacheWrite);
+  }
+  return normalized;
+}
+
+function normalizePayload(action, payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  if (action === 'ai_usage' && Array.isArray(payload.usage)) {
+    return {
+      ...payload,
+      usage: payload.usage.map((row) => normalizeUsage(row.provider, row, {
+        cacheRead: 'cache_read_tokens',
+        cacheWrite: 'cache_write_tokens',
+      })),
+    };
+  }
+  if (action === 'ai_turns' && Array.isArray(payload.turns)) {
+    return {
+      ...payload,
+      turns: payload.turns.map((turn) => ({
+        ...turn,
+        usage: normalizeUsage(turn.provider, turn.usage),
+      })),
+    };
+  }
+  if (action === 'ai_turn_detail' && Array.isArray(payload.events)) {
+    return {
+      ...payload,
+      events: payload.events.map((event) => ({
+        ...event,
+        usage: normalizeUsage(payload.provider, event.usage),
+      })),
+    };
+  }
+  return payload;
+}
 
 function buildUrl(base, action, params = {}) {
   const url = new URL(base.includes('?') ? base : `${base}/index.php`);
@@ -39,7 +91,7 @@ async function request(action, params) {
     });
     if (!response.ok) return { error: `http_${response.status}` };
     try {
-      return { data: await response.json() };
+      return { data: normalizePayload(action, await response.json()) };
     } catch {
       return { error: 'bad_json' };
     }
@@ -66,4 +118,10 @@ function fetchAiTurnDetail(idQueue) {
   return request('ai_turn_detail', { id_queue: id });
 }
 
-module.exports = { fetchAiUsage, fetchAiTurns, fetchAiTurnDetail };
+module.exports = {
+  fetchAiUsage,
+  fetchAiTurns,
+  fetchAiTurnDetail,
+  normalizeUsage,
+  normalizePayload,
+};

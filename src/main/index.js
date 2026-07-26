@@ -1,4 +1,5 @@
 const path = require('path');
+const os = require('os');
 const { pathToFileURL } = require('url');
 const { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen } = require('electron');
 
@@ -806,9 +807,12 @@ ipcMain.handle('consumption:event-content', (event, request) => {
   const location = consumptionStore.getRecordLocation(request?.id);
   if (!location) return { error: 'not_found' };
   return readEventContent({
+    origin: location.origin,
     sourcePath: location.source_path,
     firstUuid: location.first_uuid,
     lastUuid: location.last_uuid,
+    firstLine: location.first_line,
+    lastLine: location.last_line,
   });
 });
 
@@ -825,10 +829,19 @@ ipcMain.handle('consumption:daily', (event, request) => {
     if (!day) {
       day = {
         day: row.day, turns: 0, input: 0, cacheWrite: 0, cacheRead: 0, output: 0,
-        costUsd: 0, hypotheticalUsd: 0, estimated: true,
+        costUsd: 0, hypotheticalUsd: 0, estimated: true, origins: {},
       };
       byDay.set(row.day, day);
     }
+    const origin = row.origin || 'claude_code';
+    day.origins[origin] ??= {
+      turns: 0, input: 0, cacheWrite: 0, cacheRead: 0, output: 0,
+    };
+    day.origins[origin].turns += row.turns;
+    day.origins[origin].input += row.input_tokens;
+    day.origins[origin].cacheWrite += row.cache_creation_tokens;
+    day.origins[origin].cacheRead += row.cache_read_tokens;
+    day.origins[origin].output += row.output_tokens;
     day.turns += row.turns;
     day.input += row.input_tokens;
     day.cacheWrite += row.cache_creation_tokens;
@@ -882,13 +895,18 @@ ipcMain.handle('consumption:vps-turn-detail', async (event, request) => {
   if (!validConsumptionSender(event)) throw new Error('Forbidden');
   const result = await vpsUsage.fetchAiTurnDetail(request?.id_queue);
   if (!result || result.error) return result || { error: 'unknown' };
-  const rawEvents = Array.isArray(result.events) ? result.events : [];
+  const detail = result.data || result;
+  if (detail.error) return detail;
+  const rawEvents = Array.isArray(detail.events) ? detail.events : [];
+  const provider = detail.provider || 'claude_code';
   const rates = getSettings().pricing;
   const events = rawEvents.map((ev) => {
     const usage = ev.usage || {};
     const output = Array.isArray(ev.output) ? ev.output : [];
     const record = {
       messageId: ev.message_id || null,
+      origin: provider,
+      model: detail.model || null,
       endedAt: ev.ts ? Date.parse(ev.ts) : null,
       inputTokens: Number(usage.input_tokens) || 0,
       outputTokens: Number(usage.output_tokens) || 0,
@@ -1010,6 +1028,10 @@ if (!app.requestSingleInstanceLock()) {
       consumptionIngest = new ConsumptionService({
         dbPath: path.join(app.getPath('userData'), 'consumption.sqlite3'),
         retention: getSettings().consumptionRetention,
+        transcriptRoot: path.join(os.homedir(), '.claude', 'projects'),
+        codexRoot: process.env.CODEX_HOME
+          ? path.resolve(process.env.CODEX_HOME)
+          : path.join(os.homedir(), '.codex'),
       });
       consumptionIngest.on('changed', notifyConsumptionChanged);
       consumptionIngest.on('error', (error) => {

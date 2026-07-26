@@ -59,6 +59,14 @@ function dashTile(label, value, hint, kind) {
   return tile;
 }
 
+function originSummary(day) {
+  if (!day?.origins) return '';
+  return ['claude_code', 'openai_api', 'codex', 'codex_chatgpt']
+    .filter((origin) => Number(day.origins[origin]?.turns) > 0)
+    .map((origin) => `${originLabel(origin)} ${number(day.origins[origin].turns)}`)
+    .join(' · ');
+}
+
 function renderDashTiles(host, series) {
   const latest = series[series.length - 1];
   const wrap = create('div', 'dash-tiles');
@@ -70,8 +78,10 @@ function renderDashTiles(host, series) {
   const savings = savingsUsdOf(latest);
   const savedTokens = Math.round(latest.cacheRead * 0.9);
   const estimated = latest.estimated ? ` · ${t('dashEstimated')}` : '';
+  const origins = originSummary(latest);
   wrap.append(
-    dashTile(t('dashTurns'), number(latest.turns), shortDay(latest.day)),
+    dashTile(t('dashTurns'), number(latest.turns),
+      [shortDay(latest.day), origins].filter(Boolean).join(' · ')),
     dashTile(t('dashWeighted'), compactTokens(weightedOf(latest)), t('tokens')),
     dashTile(t('dashCost'), usd(latest.costUsd), `${t('dashCostDay')}${estimated}`, 'cost'),
     dashTile(t('dashSavings'), latest.estimated ? compactTokens(savedTokens) : usd(savings),
@@ -226,7 +236,9 @@ function renderDashTable(host, series) {
   for (const day of [...series].reverse()) {
     const row = create('tr');
     row.append(create('td', 'dash-day-cell', shortDay(day.day)));
-    row.append(create('td', null, number(day.turns)));
+    const turns = create('td', null, number(day.turns));
+    turns.title = originSummary(day);
+    row.append(turns);
     row.append(create('td', null, compactTokens(day.input)));
     row.append(create('td', null, compactTokens(day.cacheWrite)));
     row.append(create('td', null, compactTokens(day.cacheRead)));

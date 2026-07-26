@@ -6,11 +6,64 @@ const test = require('node:test');
 
 const { ConsumptionStore } = require('../src/main/consumption-store');
 const { ConsumptionIngest } = require('../src/main/consumption-ingest');
+const { CodexConsumptionIngest } = require('../src/main/codex-consumption-ingest');
 const { ConsumptionService } = require('../src/main/consumption-service');
+const { readCodexEventContent } = require('../src/main/event-content');
+const { normalizePayload, normalizeUsage } = require('../src/main/vps-usage');
 
 function entry(value) {
   return `${JSON.stringify(value)}\n`;
 }
+
+test('normalizes cached input semantics by VPS provider', () => {
+  assert.deepEqual(normalizeUsage('codex_chatgpt', {
+    input_tokens: 187218,
+    cache_read_input_tokens: 146176,
+    cache_creation_input_tokens: 0,
+    output_tokens: 1138,
+  }), {
+    input_tokens: 41042,
+    cache_read_input_tokens: 146176,
+    cache_creation_input_tokens: 0,
+    output_tokens: 1138,
+  });
+
+  assert.equal(normalizeUsage('openai_api', {
+    input_tokens: 15342,
+    cache_read_input_tokens: 15104,
+  }).input_tokens, 238);
+
+  assert.equal(normalizeUsage('claude_code', {
+    input_tokens: 41042,
+    cache_read_input_tokens: 146176,
+  }).input_tokens, 41042);
+});
+
+test('normalizes historical VPS rows, turns and details before rendering', () => {
+  const daily = normalizePayload('ai_usage', {
+    usage: [{
+      provider: 'codex_chatgpt',
+      input_tokens: 187218,
+      cache_read_tokens: 146176,
+      cache_write_tokens: 0,
+    }],
+  });
+  assert.equal(daily.usage[0].input_tokens, 41042);
+
+  const turns = normalizePayload('ai_turns', {
+    turns: [{
+      provider: 'codex_chatgpt',
+      usage: { input_tokens: 76814, cache_read_input_tokens: 49664 },
+    }],
+  });
+  assert.equal(turns.turns[0].usage.input_tokens, 27150);
+
+  const detail = normalizePayload('ai_turn_detail', {
+    provider: 'openai_api',
+    events: [{ usage: { input_tokens: 15342, cache_read_input_tokens: 15104 } }],
+  });
+  assert.equal(detail.events[0].usage.input_tokens, 238);
+});
 
 test('deduplicates streamed assistant blocks and keeps the final usage snapshot', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-bar-test-'));
@@ -68,6 +121,7 @@ test('deduplicates streamed assistant blocks and keeps the final usage snapshot'
   });
 
   assert.equal(page.records.length, 1);
+  assert.equal(page.records[0].origin, 'claude_code');
   assert.equal(page.records[0].outputTokens, 10);
   assert.equal(page.records[0].cacheReadTokens, 100);
   assert.equal(page.records[0].cacheCreation5mTokens, 20);
@@ -436,10 +490,14 @@ test('keeps observed and unclassified windows disjoint', (t) => {
 
 test('imports in a worker while the main process keeps a read connection', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-bar-worker-'));
+  const claudeRoot = path.join(root, 'claude');
+  const codexRoot = path.join(root, 'codex');
+  fs.mkdirSync(claudeRoot);
+  fs.mkdirSync(path.join(codexRoot, 'sessions'), { recursive: true });
   const dbPath = path.join(root, 'consumption.sqlite3');
   const retention = { days: 30, maxMb: 100 };
   const store = new ConsumptionStore(dbPath, () => retention);
-  const transcript = path.join(root, 'worker-session.jsonl');
+  const transcript = path.join(claudeRoot, 'worker-session.jsonl');
   const now = Date.now();
   fs.writeFileSync(transcript, entry({
     type: 'assistant', uuid: 'worker-a1', requestId: 'worker-r1',
@@ -449,7 +507,39 @@ test('imports in a worker while the main process keeps a read connection', async
       content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 3, output_tokens: 4 },
     },
   }));
-  const service = new ConsumptionService({ dbPath, retention, transcriptRoot: root });
+  fs.writeFileSync(path.join(codexRoot, 'sessions', 'rollout-worker.jsonl'), [
+    {
+      timestamp: new Date(now + 1).toISOString(), type: 'session_meta',
+      payload: { session_id: 'worker-codex', cwd: '/tmp/codex-worker' },
+    },
+    {
+      timestamp: new Date(now + 2).toISOString(), type: 'event_msg',
+      payload: { type: 'task_started', turn_id: 'worker-codex-turn', started_at: now / 1000 },
+    },
+    {
+      timestamp: new Date(now + 3).toISOString(), type: 'turn_context',
+      payload: { turn_id: 'worker-codex-turn', model: 'gpt-worker', cwd: '/tmp/codex-worker' },
+    },
+    {
+      timestamp: new Date(now + 4).toISOString(), type: 'event_msg',
+      payload: { type: 'user_message', client_id: 'worker-codex-prompt', message: 'Codex worker' },
+    },
+    {
+      timestamp: new Date(now + 5).toISOString(), type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: {
+            input_tokens: 11, cached_input_tokens: 6, cache_write_input_tokens: 0,
+            output_tokens: 2, reasoning_output_tokens: 0, total_tokens: 13,
+          },
+        },
+      },
+    },
+  ].map(entry).join(''));
+  const service = new ConsumptionService({
+    dbPath, retention, transcriptRoot: claudeRoot, codexRoot,
+  });
   t.after(async () => {
     await service.stop();
     store.close();
@@ -458,10 +548,173 @@ test('imports in a worker while the main process keeps a read connection', async
 
   await service.scan();
   const page = store.listRecords({ startAt: now - 1000, endAt: now + 60 * 1000 });
-  assert.equal(page.records.length, 1);
-  assert.equal(page.records[0].totalTokens, 7);
+  assert.equal(page.records.length, 2);
+  assert.deepEqual(new Set(page.records.map((record) => record.origin)),
+    new Set(['claude_code', 'codex']));
+  assert.equal(page.records.reduce((sum, record) => sum + record.totalTokens, 0), 14);
 
   const stopping = service.stop();
   await assert.rejects(service.scan(), /ConsumptionWorkerStopping/);
   await stopping;
+});
+
+test('imports Codex token deltas, preserves incremental state and exposes event content', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-bar-codex-'));
+  const sessions = path.join(root, 'sessions', '2026', '07', '25');
+  fs.mkdirSync(sessions, { recursive: true });
+  const dbPath = path.join(root, 'consumption.sqlite3');
+  const transcript = path.join(sessions, 'rollout-test.jsonl');
+  const retention = { days: 30, maxMb: 100 };
+  const store = new ConsumptionStore(dbPath, () => retention);
+  const ingest = new CodexConsumptionIngest(store, () => retention, root);
+  const now = Date.now() - 60_000;
+  t.after(() => {
+    store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const firstPart = [
+    {
+      timestamp: new Date(now).toISOString(), type: 'session_meta',
+      payload: {
+        session_id: 'codex-session', cwd: '/tmp/codex-project',
+        originator: 'Codex Desktop', source: 'vscode', thread_source: 'user',
+      },
+    },
+    {
+      timestamp: new Date(now + 1).toISOString(), type: 'event_msg',
+      payload: { type: 'task_started', turn_id: 'codex-turn', started_at: now / 1000 },
+    },
+    {
+      timestamp: new Date(now + 2).toISOString(), type: 'turn_context',
+      payload: { turn_id: 'codex-turn', cwd: '/tmp/codex-project', model: 'gpt-test' },
+    },
+    {
+      timestamp: new Date(now + 3).toISOString(), type: 'response_item',
+      payload: {
+        type: 'message', id: 'codex-user', role: 'user',
+        content: [{ type: 'input_text', text: 'Analise o consumo do Codex' }],
+      },
+    },
+    {
+      timestamp: new Date(now + 4).toISOString(), type: 'event_msg',
+      payload: {
+        type: 'user_message', client_id: 'codex-prompt',
+        message: 'Analise o consumo do Codex',
+      },
+    },
+    {
+      timestamp: new Date(now + 5).toISOString(), type: 'event_msg',
+      payload: { type: 'agent_message', message: 'Vou analisar.', phase: 'commentary' },
+    },
+    {
+      timestamp: new Date(now + 6).toISOString(), type: 'response_item',
+      payload: {
+        type: 'custom_tool_call', id: 'codex-call', call_id: 'call-1',
+        name: 'apply_patch', input: '*** Begin Patch',
+      },
+    },
+    {
+      timestamp: new Date(now + 7).toISOString(), type: 'response_item',
+      payload: {
+        type: 'custom_tool_call_output', id: 'codex-output', call_id: 'call-1',
+        output: 'resultado da ferramenta',
+      },
+    },
+  ].map(entry).join('');
+  fs.writeFileSync(transcript, firstPart);
+  await ingest._scanFile(transcript);
+  assert.equal(store.db.prepare('SELECT COUNT(*) count FROM usage_records').get().count, 0);
+
+  const remaining = [
+    {
+      timestamp: new Date(now + 8).toISOString(), type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: {
+            input_tokens: 100, cached_input_tokens: 60, cache_write_input_tokens: 5,
+            output_tokens: 10, reasoning_output_tokens: 2, total_tokens: 110,
+          },
+          model_context_window: 200000,
+        },
+      },
+    },
+    {
+      timestamp: new Date(now + 9).toISOString(), type: 'response_item',
+      payload: {
+        type: 'reasoning', id: 'codex-reasoning',
+        summary: [{ type: 'summary_text', text: 'Conferindo os dados' }],
+      },
+    },
+    {
+      timestamp: new Date(now + 10).toISOString(), type: 'event_msg',
+      payload: { type: 'agent_message', message: 'Análise concluída.', phase: 'final_answer' },
+    },
+    {
+      timestamp: new Date(now + 11).toISOString(), type: 'response_item',
+      payload: {
+        type: 'message', id: 'codex-answer', role: 'assistant',
+        content: [{ type: 'output_text', text: 'Análise concluída.' }],
+      },
+    },
+    {
+      timestamp: new Date(now + 12).toISOString(), type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: {
+            input_tokens: 120, cached_input_tokens: 100, cache_write_input_tokens: 0,
+            output_tokens: 20, reasoning_output_tokens: 4, total_tokens: 140,
+          },
+          model_context_window: 200000,
+        },
+      },
+    },
+  ].map(entry).join('');
+  fs.appendFileSync(transcript, remaining);
+  await ingest._scanFile(transcript);
+
+  const page = store.listRecords({ startAt: now - 1, endAt: now + 60_000 });
+  assert.equal(page.records.length, 2);
+  const [second, first] = page.records;
+  assert.equal(first.origin, 'codex');
+  assert.equal(first.model, 'gpt-test');
+  assert.equal(first.promptText, 'Analise o consumo do Codex');
+  assert.equal(first.inputTokens, 35);
+  assert.equal(first.cacheReadTokens, 60);
+  assert.equal(first.cacheCreationTokens, 5);
+  assert.equal(first.outputTokens, 10);
+  assert.deepEqual(first.toolNames, ['apply_patch']);
+  assert.equal(second.inputTokens, 20);
+  assert.equal(second.cacheReadTokens, 100);
+  assert.equal(second.outputTokens, 20);
+  assert.equal(second.promptUuid, first.promptUuid);
+  const [daily] = store.summarizeDaily(30);
+  assert.equal(daily.origin, 'codex');
+  assert.equal(daily.turns, 2);
+
+  const firstLocation = store.getRecordLocation(first.id);
+  const firstIo = readCodexEventContent(
+    fs.readFileSync(transcript, 'utf8'), firstLocation.first_line, firstLocation.last_line,
+  );
+  assert.equal(firstIo.input[0].text, 'Analise o consumo do Codex');
+  assert.ok(firstIo.output.some((block) => (
+    block.kind === 'tool_use' && block.name === 'apply_patch'
+  )));
+  assert.equal(firstIo.input.some((block) => block.text.includes('resultado da ferramenta')), false);
+
+  const secondLocation = store.getRecordLocation(second.id);
+  const secondIo = readCodexEventContent(
+    fs.readFileSync(transcript, 'utf8'), secondLocation.first_line, secondLocation.last_line,
+  );
+  assert.ok(secondIo.input.some((block) => block.text.includes('resultado da ferramenta')));
+  assert.ok(secondIo.output.some((block) => block.text.includes('Análise concluída.')));
+
+  const archived = path.join(root, 'archived_sessions', 'rollout-test.jsonl');
+  fs.mkdirSync(path.dirname(archived), { recursive: true });
+  fs.renameSync(transcript, archived);
+  await ingest._scanFile(archived);
+  assert.equal(store.db.prepare('SELECT COUNT(*) count FROM usage_records').get().count, 2);
+  assert.equal(store.getRecordLocation(first.id).source_path, archived);
 });

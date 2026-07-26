@@ -16,10 +16,14 @@ const fallback = {
   record: 'registro', records: 'registros', groupedSingular: 'agrupado',
   groupedPlural: 'agrupados', tokens: 'tokens',
   mainAgent: 'Agente principal', subagent: 'Subagente', response: 'Resposta do Claude',
-  thinking: 'Processamento do Claude', apiError: 'Evento de erro do Claude Code',
+  responseCodex: 'Resposta do Codex', responseOpenAi: 'Resposta da OpenAI', thinking: 'Processamento do Claude',
+  thinkingOpenAi: 'Processamento da OpenAI',
+  thinkingCodex: 'Processamento do Codex', apiError: 'Evento de erro do Claude Code',
+  apiErrorCodex: 'Evento de erro do Codex', apiErrorOpenAi: 'Evento de erro da OpenAI',
   tools: 'Ferramentas: {names}', errorCode: 'Erro', httpStatus: 'HTTP',
   project: 'Projeto', branch: 'Branch', model: 'Modelo', depth: 'Profundidade',
   sessionId: 'Sessão', requestId: 'Requisição', messageId: 'Mensagem', recordId: 'Registro',
+  origin: 'Origem', originClaudeCode: 'Claude Code', originOpenAi: 'OpenAI', originCodex: 'Codex',
   sourceLocal: 'Local', sourceVps: 'VPS', viewDashboard: 'Dashboard', viewMessages: 'Mensagens',
   cache: 'Cache', cost: 'Custo', cacheWrite: 'Cache escrita', cacheRead: 'Cache leitura',
   costBreakdown: 'Custo detalhado · tokens · preço US$/Mtok',
@@ -261,8 +265,15 @@ function windowLabel(item) {
 
 function messageGroupKey(record) {
   const session = record.sessionId || 'session-unknown';
-  if (record.promptUuid) return `${session}\u0000prompt:${record.promptUuid}`;
-  return `${session}\u0000event:${record.requestId || record.messageId || record.id}`;
+  const origin = record.origin || 'claude_code';
+  if (record.promptUuid) return `${origin}\u0000${session}\u0000prompt:${record.promptUuid}`;
+  return `${origin}\u0000${session}\u0000event:${record.requestId || record.messageId || record.id}`;
+}
+
+function originLabel(origin) {
+  if (origin === 'codex' || origin === 'codex_chatgpt') return t('originCodex');
+  if (origin === 'openai_api') return t('originOpenAi');
+  return t('originClaudeCode');
 }
 
 function agentName(record) {
@@ -292,6 +303,7 @@ function groupRecords(records) {
         priced: false,
         records: [],
         agents: new Set(),
+        origins: new Set(),
         projects: new Set(),
         branches: new Set(),
         models: new Set(),
@@ -314,6 +326,7 @@ function groupRecords(records) {
     if (record.priced) group.priced = true;
     group.records.push(record);
     group.agents.add(agentName(record));
+    group.origins.add(originLabel(record.origin));
     if (record.projectName) group.projects.add(record.projectName);
     if (record.gitBranch) group.branches.add(record.gitBranch);
     if (record.model) group.models.add(record.model);
@@ -428,16 +441,21 @@ function renderTimeline() {
 }
 
 function activityFor(record) {
-  if (record.eventKind === 'error') return record.statusText || t('apiError');
+  const codex = record.origin === 'codex' || record.origin === 'codex_chatgpt';
+  const openai = record.origin === 'openai_api';
+  if (record.eventKind === 'error') {
+    return record.statusText || t(openai ? 'apiErrorOpenAi' : (codex ? 'apiErrorCodex' : 'apiError'));
+  }
   const tools = Array.isArray(record.toolNames) ? record.toolNames : [];
   const contentKinds = Array.isArray(record.contentKinds) ? record.contentKinds : [];
   if (tools.length) return tools.join(', ');
-  if (contentKinds.includes('text')) return t('response');
-  return t('thinking');
+  if (contentKinds.includes('text')) return t(openai ? 'responseOpenAi' : (codex ? 'responseCodex' : 'response'));
+  return t(openai ? 'thinkingOpenAi' : (codex ? 'thinkingCodex' : 'thinking'));
 }
 
 function eventContext(record) {
   return [
+    originLabel(record.origin),
     agentName(record),
     record.agentType,
     record.spawnDepth != null ? `${t('depth')}: ${record.spawnDepth}` : null,
@@ -607,9 +625,9 @@ function appendMessageGroup(group) {
   const agents = [...group.agents].filter(Boolean);
   copy.append(create('small', null,
     `${recordCountText(group.records.length)} ${t(group.records.length === 1
-      ? 'groupedSingular' : 'groupedPlural')} · ${agents.join(' + ')}`));
+      ? 'groupedSingular' : 'groupedPlural')} · ${[...group.origins].join(' + ')} · ${agents.join(' + ')}`));
   const error = group.records.find((record) => record.eventKind === 'error');
-  if (error) copy.append(create('small', 'status-error', error.statusText || t('apiError')));
+  if (error) copy.append(create('small', 'status-error', activityFor(error)));
 
   const cachedInput = group.cacheReadTokens + group.cacheCreationTokens;
   const cacheShare = Math.round(100 * group.cacheReadTokens
@@ -629,6 +647,7 @@ function appendMessageGroup(group) {
 
   const expanded = create('div', 'message-expanded');
   const metadata = create('div', 'message-metadata');
+  appendGroupMetadata(metadata, t('origin'), group.origins);
   appendGroupMetadata(metadata, t('project'), group.projects);
   appendGroupMetadata(metadata, t('branch'), group.branches);
   appendGroupMetadata(metadata, t('model'), group.models);
@@ -975,9 +994,36 @@ function ensureToday(rows) {
     list.push({
       day: today, turns: 0, input_tokens: 0, cache_write_tokens: 0,
       cache_read_tokens: 0, output_tokens: 0, cost_usd: 0,
+      provider: 'claude_code', model: '',
     });
   }
   return list;
+}
+
+function aggregateVpsRows(rows) {
+  const byDay = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = String(row.day);
+    let day = byDay.get(key);
+    if (!day) {
+      day = {
+        day: key, turns: 0, input_tokens: 0, cache_write_tokens: 0,
+        cache_read_tokens: 0, output_tokens: 0, cost_usd: 0, origins: {},
+      };
+      byDay.set(key, day);
+    }
+    const provider = row.provider || 'claude_code';
+    const turns = Number(row.turns) || 0;
+    day.origins[provider] ??= { turns: 0 };
+    day.origins[provider].turns += turns;
+    day.turns += turns;
+    day.input_tokens += Number(row.input_tokens) || 0;
+    day.cache_write_tokens += Number(row.cache_write_tokens) || 0;
+    day.cache_read_tokens += Number(row.cache_read_tokens) || 0;
+    day.output_tokens += Number(row.output_tokens) || 0;
+    day.cost_usd += Number(row.cost_usd) || 0;
+  }
+  return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
 
 function normalizeVpsSeries(rows) {
@@ -1000,6 +1046,7 @@ function normalizeVpsSeries(rows) {
       costUsd,
       hypotheticalUsd: costUsd + cacheRead * savedPerCacheRead,
       estimated: false,
+      origins: row.origins || {},
     };
   });
 }
@@ -1049,7 +1096,7 @@ async function loadDashboard() {
       showDashboard([], { error: result.error });
       return;
     }
-    showDashboard(normalizeVpsSeries(ensureToday(result?.data?.usage)), {});
+    showDashboard(normalizeVpsSeries(aggregateVpsRows(ensureToday(result?.data?.usage))), {});
   } catch (error) {
     showDashboard([], { error: error.message });
   }
@@ -1105,6 +1152,8 @@ function vpsTurnRow(turn) {
     : null;
   copy.append(create('small', null, [
     turn.proactive ? t('vpsProactive') : t('vpsReactive'),
+    originLabel(turn.provider),
+    turn.model || null,
     turn.phone_suffix ? `···${turn.phone_suffix}` : null,
   ].filter(Boolean).join(' · ')));
 
@@ -1143,6 +1192,12 @@ function vpsTurnRow(turn) {
   });
   const expanded = create('div', 'message-expanded');
   const body = create('div', 'vps-turn-body');
+  const metadata = create('div', 'message-metadata');
+  appendGroupMetadata(metadata, t('origin'), new Set([originLabel(turn.provider)]));
+  appendGroupMetadata(metadata, t('project'), new Set(['Sofia · VPS']));
+  appendGroupMetadata(metadata, t('model'), new Set(turn.model ? [turn.model] : []));
+  appendGroupMetadata(metadata, t('sessionId'), new Set(turn.session_id ? [turn.session_id] : []));
+  body.append(metadata);
   body.append(eventBreakdown(turn));
   if (hasReal) {
     body.append(create('div', 'vps-cost-note',
@@ -1185,7 +1240,12 @@ async function loadVpsTurnDetail(turn, host) {
     header.append(create('span', null, label));
   }
   events.append(header);
-  for (const record of result.events) appendEvent(events, record);
+  for (const record of result.events) {
+    record.origin ||= turn.provider || 'claude_code';
+    record.model ||= turn.model || null;
+    record.sessionId ||= turn.session_id || null;
+    appendEvent(events, record);
+  }
   host.replaceChildren(events);
 }
 
@@ -1229,7 +1289,7 @@ async function loadVpsMessages() {
     vpsStateMessage(`${t('dashError')} (${result.error})`);
     return;
   }
-  state.vpsDays = ensureToday(result?.data?.usage);
+  state.vpsDays = aggregateVpsRows(ensureToday(result?.data?.usage));
   // Auto-refresh não pode "roubar" a seleção: mantém o dia que o usuário está
   // olhando se ele ainda existe; senão, seleciona o mais recente (hoje).
   const keepSelected = state.vpsSelectedDay

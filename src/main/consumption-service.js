@@ -6,14 +6,14 @@ const STOP_TIMEOUT_MS = 5000;
 const TERMINATE_TIMEOUT_MS = 2000;
 
 class ConsumptionService extends EventEmitter {
-  constructor({ dbPath, retention, transcriptRoot }) {
+  constructor({ dbPath, retention, transcriptRoot, codexRoot = null }) {
     super();
     this.nextId = 1;
     this.pending = new Map();
     this.stopping = false;
     this.stopPromise = null;
     this.worker = new Worker(path.join(__dirname, 'consumption-worker.js'), {
-      workerData: { dbPath, retention, transcriptRoot },
+      workerData: { dbPath, retention, transcriptRoot, codexRoot },
     });
     this.worker.on('message', (message) => this._message(message));
     this.worker.on('error', (error) => this.emit('error', error));
